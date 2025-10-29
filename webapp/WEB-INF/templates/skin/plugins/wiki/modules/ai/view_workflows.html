@@ -1,0 +1,219 @@
+<#ftl output_format="HTML">
+<#if book??>
+    <div class="row">
+        <div class="wiki-sidebar-col">
+            <div class="sticky-top">
+                <#include "../../commons/sidebar.html">
+            </div>
+        </div>
+        <div class="col px-5 pt-0 wiki-markdown-col">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h1 class="mb-2">#i18n{module.wiki.ai.quizGeneration.workflows.title}</h1>
+                    <#if quiz??>
+                        <p class="text-muted mb-0">${quiz.title}</p>
+                    </#if>
+                </div>
+                <#if quiz??>
+                    <div class="d-flex gap-2">
+                        <a href="jsp/site/Portal.jsp?page=wikiaiQuizGeneration&view=selectPages&quiz_id=${quiz.id}" class="btn btn-dark rounded-pill px-4">
+                            <i class="ti ti-plus me-2"></i>#i18n{module.wiki.ai.quizGeneration.newGeneration}
+                        </a>
+                        <a href="jsp/site/Portal.jsp?page=quiz&view=quizDetail&quiz_id=${quiz.id}" class="btn btn-light rounded-pill px-4">
+                            <i class="ti ti-arrow-left me-2"></i>#i18n{portal.util.labelBack}
+                        </a>
+                    </div>
+                </#if>
+            </div>
+
+            <#include "../../commons/messages.html" />
+
+            <#if workflows?? && workflows?size gt 0>
+                <div class="table-responsive">
+                    <table class="table mb-0">
+                        <thead>
+                            <tr>
+                                <th>#i18n{module.wiki.ai.quizGeneration.workflows.date}</th>
+                                <th>#i18n{module.wiki.ai.quizGeneration.workflows.status}</th>
+                                <th>#i18n{module.wiki.ai.quizGeneration.workflows.progress}</th>
+                                <th>#i18n{module.wiki.ai.quizGeneration.workflows.user}</th>
+                                <th class="text-end">#i18n{portal.util.labelActions}</th>
+                            </tr>
+                        </thead>
+                        <tbody id="workflows-tbody">
+                            <#list workflows as workflow>
+                                <tr data-workflow-id="${workflow.id}" data-status="${workflow.status.code}">
+                                    <td>${workflow.dateCreation?string('dd/MM/yyyy HH:mm')}</td>
+                                    <td class="workflow-status-cell">
+                                        <#if workflow.status.code == "PENDING">
+                                            <span class="badge text-warning-emphasis bg-warning-subtle border border-warning-subtle">
+                                                <i class="ti ti-clock me-1"></i>#i18n{module.wiki.ai.quizGeneration.status.pending}
+                                            </span>
+                                        <#elseif workflow.status.code == "PROCESSING">
+                                            <span class="badge text-info-emphasis bg-info-subtle border border-info-subtle">
+                                                <i class="ti ti-loader me-1 spin-animation"></i>#i18n{module.wiki.ai.quizGeneration.status.processing}
+                                            </span>
+                                        <#elseif workflow.status.code == "COMPLETED">
+                                            <span class="badge text-success-emphasis bg-success-subtle border border-success-subtle">
+                                                <i class="ti ti-check me-1"></i>#i18n{module.wiki.ai.quizGeneration.status.completed}
+                                            </span>
+                                        <#else>
+                                            <span class="badge text-danger-emphasis bg-danger-subtle border border-danger-subtle">
+                                                <i class="ti ti-x me-1"></i>#i18n{module.wiki.ai.quizGeneration.status.error}
+                                            </span>
+                                            <#if workflow.errorMessage?? && workflow.errorMessage?has_content>
+                                                <br><small class="text-danger">${workflow.errorMessage?truncate(80)}</small>
+                                            </#if>
+                                        </#if>
+                                    </td>
+                                    <td class="workflow-progress-cell">
+                                        <#if workflow.totalPages gt 0>
+                                            <span class="text-muted">${workflow.processedPages} / ${workflow.totalPages}</span>
+                                        <#else>
+                                            <span class="text-muted">-</span>
+                                        </#if>
+                                    </td>
+                                    <td>${workflow.idUser}</td>
+                                    <td class="text-end workflow-actions-cell">
+                                        <div class="btn-group btn-group-sm">
+                                            <#if workflow.status.code != "PENDING">
+                                                <a href="jsp/site/Portal.jsp?page=wikiaiQuizGeneration&view=reviewQuestions&workflow_id=${workflow.id}" class="btn btn-light btn-view-results">
+                                                    <i class="ti ti-eye me-1"></i>#i18n{module.wiki.ai.quizGeneration.viewResults}
+                                                </a>
+                                            </#if>
+                                            <a href="jsp/site/Portal.jsp?page=wikiaiQuizGeneration&action=deleteWorkflow&workflow_id=${workflow.id}&quiz_id=${quiz.id}&token=${token}" class="btn btn-light text-danger" onclick="return confirm('#i18n{module.wiki.ai.quizGeneration.confirmDelete}');">
+                                                <i class="ti ti-trash"></i>
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </#list>
+                        </tbody>
+                    </table>
+                </div>
+            <#else>
+                <div class="card" style="border-radius: 20px;">
+                    <div class="card-body p-5 text-center">
+                        <p class="text-muted mb-3">#i18n{module.wiki.ai.quizGeneration.noWorkflows}</p>
+                        <#if quiz??>
+                            <a href="jsp/site/Portal.jsp?page=wikiaiQuizGeneration&view=selectPages&quiz_id=${quiz.id}" class="btn btn-dark rounded-pill px-4">
+                                <i class="ti ti-plus me-2"></i>#i18n{module.wiki.ai.quizGeneration.startFirst}
+                            </a>
+                        </#if>
+                    </div>
+                </div>
+            </#if>
+        </div>
+    </div>
+<#else>
+    <div class="container py-4">
+        <div class="alert alert-warning">
+            #i18n{module.wiki.ai.quizGeneration.error.bookNotFound}
+        </div>
+    </div>
+</#if>
+
+<#if is_module_ai_present?? && is_module_ai_present>
+    <#include "/skin/plugins/wiki/modules/ai/chat.html">
+</#if>
+
+<style>
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+.spin-animation {
+    animation: spin 1s linear infinite;
+    display: inline-block;
+}
+</style>
+
+<#if quiz??>
+<script>
+(function() {
+    var quizId = ${quiz.id};
+    var pollInterval = null;
+    var statusLabels = {
+        PENDING: '#i18n{module.wiki.ai.quizGeneration.status.pending}',
+        PROCESSING: '#i18n{module.wiki.ai.quizGeneration.status.processing}',
+        COMPLETED: '#i18n{module.wiki.ai.quizGeneration.status.completed}',
+        ERROR: '#i18n{module.wiki.ai.quizGeneration.status.error}'
+    };
+    var viewResultsLabel = '#i18n{module.wiki.ai.quizGeneration.viewResults}';
+
+    function getStatusBadgeHtml(status, errorMessage) {
+        if (status === 'PENDING') {
+            return '<span class="badge text-warning-emphasis bg-warning-subtle border border-warning-subtle"><i class="ti ti-clock me-1"></i>' + statusLabels.PENDING + '</span>';
+        } else if (status === 'PROCESSING') {
+            return '<span class="badge text-info-emphasis bg-info-subtle border border-info-subtle"><i class="ti ti-loader me-1 spin-animation"></i>' + statusLabels.PROCESSING + '</span>';
+        } else if (status === 'COMPLETED') {
+            return '<span class="badge text-success-emphasis bg-success-subtle border border-success-subtle"><i class="ti ti-check me-1"></i>' + statusLabels.COMPLETED + '</span>';
+        } else {
+            var html = '<span class="badge text-danger-emphasis bg-danger-subtle border border-danger-subtle"><i class="ti ti-x me-1"></i>' + statusLabels.ERROR + '</span>';
+            if (errorMessage) {
+                var truncated = errorMessage.length > 80 ? errorMessage.substring(0, 77) + '...' : errorMessage;
+                html += '<br><small class="text-danger">' + truncated + '</small>';
+            }
+            return html;
+        }
+    }
+
+    function updateWorkflowRow(row, data) {
+        var currentStatus = row.getAttribute('data-status');
+        var statusChanged = currentStatus !== data.status;
+
+        if (statusChanged) {
+            row.setAttribute('data-status', data.status);
+            row.querySelector('.workflow-status-cell').innerHTML = getStatusBadgeHtml(data.status, data.errorMessage);
+        }
+
+        var progressCell = row.querySelector('.workflow-progress-cell');
+        if (progressCell && data.totalPages > 0) {
+            progressCell.innerHTML = '<span class="text-muted">' + data.processedPages + ' / ' + data.totalPages + '</span>';
+        }
+
+        if (data.status !== 'PENDING') {
+            var actionsCell = row.querySelector('.workflow-actions-cell .btn-group');
+            var existingViewBtn = actionsCell.querySelector('.btn-view-results');
+            if (!existingViewBtn) {
+                var viewBtn = document.createElement('a');
+                viewBtn.href = 'jsp/site/Portal.jsp?page=wikiaiQuizGeneration&view=reviewQuestions&workflow_id=' + data.id;
+                viewBtn.className = 'btn btn-light btn-view-results';
+                viewBtn.innerHTML = '<i class="ti ti-eye me-1"></i>' + viewResultsLabel;
+                actionsCell.insertBefore(viewBtn, actionsCell.firstChild);
+            }
+        }
+    }
+
+    function pollWorkflows() {
+        var rows = document.querySelectorAll('#workflows-tbody tr[data-status="PENDING"], #workflows-tbody tr[data-status="PROCESSING"]');
+        if (rows.length === 0) {
+            if (pollInterval) {
+                clearInterval(pollInterval);
+                pollInterval = null;
+            }
+            return;
+        }
+
+        fetch('rest/wiki/ai/quiz-generation/quiz/' + quizId + '/workflows')
+            .then(function(response) { return response.json(); })
+            .then(function(workflows) {
+                workflows.forEach(function(wf) {
+                    var row = document.querySelector('#workflows-tbody tr[data-workflow-id="' + wf.id + '"]');
+                    if (row) {
+                        updateWorkflowRow(row, wf);
+                    }
+                });
+            })
+            .catch(function(err) {
+                console.error('Error polling workflows:', err);
+            });
+    }
+
+    var hasPendingOrProcessing = document.querySelectorAll('#workflows-tbody tr[data-status="PENDING"], #workflows-tbody tr[data-status="PROCESSING"]').length > 0;
+    if (hasPendingOrProcessing) {
+        pollInterval = setInterval(pollWorkflows, 3000);
+    }
+})();
+</script>
+</#if>

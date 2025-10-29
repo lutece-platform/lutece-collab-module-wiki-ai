@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?><plug-in>
+   <name>wiki-ai</name>
+   <class>fr.paris.lutece.plugins.wiki.modules.ai.service.WikiAIPlugin</class>
+   <version>1.0.0-SNAPSHOT</version>
+   <description>module.wiki.ai.module.description</description>
+   <documentation/>
+   <installation/>
+   <changes/>
+   <user-guide/>
+   <provider>module.wiki.ai.module.provider</provider>
+   <provider-url>http://lutece.paris.fr</provider-url>
+   <icon-url>images/admin/skin/plugins/wiki/wiki.png</icon-url>
+   <copyright>Copyright 2001-2025 Mairie de Paris</copyright>
+   <core-version-dependency>
+		<min-core-version>7.0.0</min-core-version>
+		<max-core-version/>
+   </core-version-dependency>
+
+   <db-pool-required>1</db-pool-required>
+
+   <!-- Admin Features -->
+   <admin-features>
+      <admin-feature>
+         <feature-id>WIKI_AI_MANAGEMENT</feature-id>
+         <feature-title>module.wiki.ai.adminFeature.pageTitle</feature-title>
+         <feature-description>module.wiki.ai.adminFeature.description</feature-description>
+         <feature-level>1</feature-level>
+         <feature-url>jsp/admin/plugins/wiki/modules/ai/ManageIndexation.jsp</feature-url>
+         <feature-icon-url>images/admin/skin/plugins/wiki/wiki.png</feature-icon-url>
+      </admin-feature>
+      <admin-feature>
+         <feature-id>WIKI_AI_FEATURES</feature-id>
+         <feature-title>module.wiki.ai.manage_features.pageTitle</feature-title>
+         <feature-description>module.wiki.ai.adminFeature.features.description</feature-description>
+         <feature-level>1</feature-level>
+         <feature-url>jsp/admin/plugins/wiki/modules/ai/ManageAiFeatures.jsp</feature-url>
+         <feature-icon-url>images/admin/skin/plugins/wiki/wiki.png</feature-icon-url>
+      </admin-feature>
+   </admin-features>
+
+   <!-- Daemons -->
+   <daemons>
+      <daemon>
+         <daemon-id>aiRateLimitCleanupDaemon</daemon-id>
+         <daemon-name>AI Rate Limit Cleanup Daemon</daemon-name>
+         <daemon-description>Cleans up expired AI rate limit entries older than 24 hours</daemon-description>
+         <daemon-class>fr.paris.lutece.plugins.wiki.modules.ai.service.rate.AiRateLimitCleanupDaemon</daemon-class>
+      </daemon>
+      <daemon>
+         <daemon-id>wikiAIIncrementalIndexationDaemon</daemon-id>
+         <daemon-name>Wiki AI Incremental Indexation Daemon</daemon-name>
+         <daemon-description>Processes incremental embedding indexation for wiki content using IndexerAction</daemon-description>
+         <daemon-class>fr.paris.lutece.plugins.wiki.modules.ai.service.daemon.WikiAIIncrementalIndexationDaemon</daemon-class>
+      </daemon>
+      <daemon>
+         <daemon-id>quizGenerationDaemon</daemon-id>
+         <daemon-name>Quiz Generation AI Daemon</daemon-name>
+         <daemon-description>Processes pending quiz question generation workflows using AI</daemon-description>
+         <daemon-class>fr.paris.lutece.plugins.wiki.modules.ai.service.quiz.QuizGenerationDaemon</daemon-class>
+      </daemon>
+   </daemons>
+
+   <!-- XPages -->
+   <applications>
+      <application>
+         <application-id>wikiaiQuizGeneration</application-id>
+         <application-class>fr.paris.lutece.plugins.wiki.modules.ai.web.QuizGenerationXPage</application-class>
+      </application>
+   </applications>
+
+</plug-in>

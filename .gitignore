@@ -1,0 +1,11 @@
+# .gitignore
+node_modules/
+target/
+CLAUDE.md
+.claude
+.vscode
+.token-counter
+.classpath
+.settings/
+.project
+.factorypath

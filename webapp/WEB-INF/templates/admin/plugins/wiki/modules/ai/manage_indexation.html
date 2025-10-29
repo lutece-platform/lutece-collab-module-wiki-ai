@@ -1,0 +1,219 @@
+<#ftl output_format="HTML">
+<@pageContainer>
+  <@pageColumn>
+    <@pageHeader title='#i18n{module.wiki.ai.adminFeature.manageIndexation.pageTitle}'
+                 description='#i18n{module.wiki.ai.adminFeature.info.description}' />
+
+    <@messages />
+
+    <@table>
+      <thead>
+        <tr>
+          <th>#i18n{module.wiki.ai.adminFeature.columnOperation}</th>
+          <th>#i18n{module.wiki.ai.adminFeature.columnStatus}</th>
+          <th>#i18n{module.wiki.ai.adminFeature.columnActions}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <strong>#i18n{module.wiki.ai.adminFeature.wikiContent}</strong>
+          </td>
+          <td id="wiki-status-cell">
+            <div id="wiki-index-stats">
+              <@icon style='spinner' /> #i18n{module.wiki.ai.adminFeature.loadingStats}
+            </div>
+            <div id="wiki-indexing-progress" style="display:none;">
+              <div class="progress">
+                <div class="progress-bar progress-bar-striped progress-bar-animated"
+                     role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                </div>
+              </div>
+              <div id="log-wiki-indexing" style="margin-top: 10px; font-style: italic; font-size: 0.9em;">
+              </div>
+            </div>
+          </td>
+          <td>
+            <div class="d-flex gap-2 align-items-center flex-wrap">
+              <@button title='#i18n{module.wiki.ai.adminFeature.buttonFullIndexation}'
+                       buttonIcon='refresh'
+                       color='primary'
+                       size='sm'
+                       params='data-indexId="wiki" data-action="indexFull"' />
+              <div class="input-group input-group-sm" style="width:auto;">
+                <select id="space-select" class="form-select form-select-sm">
+                  <#list space_list as space>
+                    <option value="${space.code!}">${space.code!}</option>
+                  </#list>
+                </select>
+                <@button title='#i18n{module.wiki.ai.adminFeature.buttonIndexSpace}'
+                         buttonIcon='refresh'
+                         color='info'
+                         size='sm'
+                         params='data-indexId="wiki" data-action="indexSpace"' />
+              </div>
+              <@button title='#i18n{module.wiki.ai.adminFeature.buttonClearIndex}'
+                       buttonIcon='trash'
+                       color='danger'
+                       size='sm'
+                       params='data-indexId="wiki" data-action="indexClear"' />
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </@table>
+  </@pageColumn>
+</@pageContainer>
+
+<script>
+    const datasources = document.querySelectorAll("*[data-indexId]");
+    let isIndexing = false;
+
+    async function loadIndexStats() {
+        try {
+            let response = await fetch("rest/wiki/ai/indexation/stats");
+            let data = await response.json();
+            displayIndexStats(data);
+        } catch (error) {
+            console.error("Error fetching index stats:", error);
+            document.getElementById("wiki-index-stats").innerHTML = '<span class="text-danger">Error loading stats</span>';
+        }
+    }
+
+    function displayIndexStats(stats) {
+        const statsDiv = document.getElementById("wiki-index-stats");
+        if (stats.indexExists) {
+            statsDiv.innerHTML = '<strong>' + stats.documentCount + '</strong> documents indexed';
+        } else {
+            statsDiv.innerHTML = '<span class="text-warning">Index not initialized</span>';
+        }
+    }
+
+    async function check() {
+        if (datasources != null && isIndexing) {
+            for (const datasource of datasources) {
+                const dataSourceId = datasource.getAttribute('data-indexId');
+                await getStatus(dataSourceId).then(json => {
+                    updateStatus(dataSourceId, json);
+                });
+            }
+        }
+    }
+
+    async function getStatus(dataSourceId) {
+        try {
+            let response = await fetch("rest/wiki/ai/indexation/status");
+            let data = await response.json();
+            return data;
+        } catch (error) {
+            console.error("Error fetching status:", error);
+            return null;
+        }
+    }
+
+    async function runIndex(action) {
+        try {
+            let endpoint;
+            if (action === 'indexFull') {
+                endpoint = 'full';
+            } else if (action === 'indexSpace') {
+                const spaceCode = document.getElementById('space-select').value;
+                endpoint = 'space/' + encodeURIComponent(spaceCode);
+            } else {
+                endpoint = 'clear';
+            }
+            isIndexing = true;
+
+            document.getElementById("wiki-index-stats").style.display = 'none';
+            document.getElementById("wiki-indexing-progress").style.display = 'block';
+
+            let response = await fetch('rest/wiki/ai/indexation/' + endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                console.error("Error running index:", errorData.error || "Unknown error");
+                isIndexing = false;
+                document.getElementById("wiki-index-stats").style.display = 'block';
+                document.getElementById("wiki-indexing-progress").style.display = 'none';
+                return;
+            }
+
+            check();
+        } catch (error) {
+            console.error("Error running index:", error);
+            isIndexing = false;
+            document.getElementById("wiki-index-stats").style.display = 'block';
+            document.getElementById("wiki-indexing-progress").style.display = 'none';
+        }
+    }
+
+    setInterval(function () {
+        check();
+    }, 1500);
+
+    function updateStatus(dataSourceId, json) {
+        const progressDiv = document.getElementById(dataSourceId + "-indexing-progress");
+        const statsDiv = document.getElementById(dataSourceId + "-index-stats");
+        const logDiv = document.getElementById("log-" + dataSourceId + "-indexing");
+        const btns = document.querySelectorAll("*[data-indexId=" + dataSourceId + "]");
+
+        if (json !== null) {
+            const logs = json.stringSbLogs || "";
+            logDiv.innerHTML = logs.replace(/\n/g, '<br>');
+
+            if (json.isRunning === true) {
+                statsDiv.style.display = 'none';
+                progressDiv.style.display = 'block';
+
+                btns.forEach(btn => {
+                    btn.disabled = true;
+                });
+
+                const bar = progressDiv.querySelector("*[aria-valuenow]");
+                const progress = json.progress || 0;
+                const current = json.currentNbIndexedObj || 0;
+                const total = json.nbTotalObj || 0;
+
+                bar.setAttribute("aria-valuenow", progress);
+                bar.style.width = progress + "%";
+                bar.innerHTML = progress.toFixed(2) + "%" + " (" + current + "/" + total + ")";
+
+                isIndexing = true;
+            } else {
+                btns.forEach(btn => {
+                    btn.disabled = false;
+                });
+                progressDiv.style.display = 'none';
+                statsDiv.style.display = 'block';
+                isIndexing = false;
+
+                loadIndexStats();
+            }
+        }
+    }
+
+    for (const datasource of datasources) {
+        datasource.addEventListener('click', async function (event) {
+            event.preventDefault();
+            const action = event.target.getAttribute('data-action');
+            event.target.disabled = true;
+            await runIndex(action);
+        }, false);
+    }
+
+    loadIndexStats();
+</script>
+
+<style>
+    table .progress,
+    table .progress-bar {
+        height: 20px !important;
+        font-weight: bold;
+        text-transform: uppercase;
+    }
+</style>

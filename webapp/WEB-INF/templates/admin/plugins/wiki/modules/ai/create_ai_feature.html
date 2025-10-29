@@ -1,0 +1,52 @@
+<#ftl output_format="HTML">
+<@pageContainer>
+  <@pageColumn>
+    <@pageHeader title='#i18n{module.wiki.ai.create_feature.pageTitle}' />
+
+    <@messages />
+
+    <@tform class='form' method='post' name='create_feature' action='jsp/admin/plugins/wiki/modules/ai/ManageAiFeatures.jsp' boxed=true boxTitle='#i18n{module.wiki.ai.create_feature.title}' boxColor='primary'>
+      <@formGroup labelFor='name' labelKey='#i18n{module.wiki.ai.create_feature.labelName}' mandatory=true>
+        <@input type='text' name='name' id='name' value=feature.name!'' maxlength=255 />
+      </@formGroup>
+
+      <@formGroup labelFor='type' labelKey='#i18n{module.wiki.ai.create_feature.labelType}' mandatory=true>
+        <@select name='type' id='type' default_value=feature.type!''>
+          <@option label='#i18n{module.wiki.ai.create_feature.typeReplace}' value='replace' />
+          <@option label='#i18n{module.wiki.ai.create_feature.typeInsertBefore}' value='insertBefore' />
+          <@option label='#i18n{module.wiki.ai.create_feature.typeInsertAfter}' value='insertAfter' />
+        </@select>
+      </@formGroup>
+
+      <@formGroup labelFor='display_mode' labelKey='#i18n{module.wiki.ai.create_feature.labelDisplayMode}' mandatory=true>
+        <@select name='display_mode' id='display_mode' default_value=feature.displayMode!'dropdown'>
+          <@option label='#i18n{module.wiki.ai.create_feature.displayModeDropdown}' value='dropdown' />
+          <@option label='#i18n{module.wiki.ai.create_feature.displayModeButton}' value='button' />
+        </@select>
+      </@formGroup>
+
+      <@formGroup labelFor='prompt_template' labelKey='#i18n{module.wiki.ai.create_feature.labelPromptTemplate}' mandatory=true>
+        <@input type='textarea' name='prompt_template' id='prompt_template' rows=6>${feature.promptTemplate!''}</@input>
+      </@formGroup>
+
+      <@formGroup labelFor='active' labelKey='#i18n{module.wiki.ai.create_feature.labelActive}'>
+        <@checkBox name='active' id='active' value='1' checked=feature.active!true />
+      </@formGroup>
+
+      <@formGroup labelFor='order' labelKey='#i18n{module.wiki.ai.create_feature.labelOrder}'>
+        <@select name='order' id='order'>
+          <#list 1..(feature_list?size + 1) as i>
+            <@option value=i label='${i}' selected=(feature.order!1)==i />
+          </#list>
+        </@select>
+      </@formGroup>
+
+      <@formGroup rows=2>
+        <@button type='submit' name='action_createFeature' title='#i18n{module.wiki.ai.create_feature.buttonValidate}' />
+        <@aButton href='jsp/admin/plugins/wiki/modules/ai/ManageAiFeatures.jsp?view=manageFeatures'
+                  title='#i18n{portal.admin.message.buttonCancel}'
+                  color='secondary' />
+      </@formGroup>
+    </@tform>
+  </@pageColumn>
+</@pageContainer>

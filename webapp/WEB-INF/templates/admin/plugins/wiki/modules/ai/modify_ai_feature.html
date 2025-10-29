@@ -1,0 +1,54 @@
+<#ftl output_format="HTML">
+<@pageContainer>
+  <@pageColumn>
+    <@pageHeader title='#i18n{module.wiki.ai.modify_feature.pageTitle}' />
+
+    <@messages />
+
+    <@tform class='form' method='post' name='modify_feature' action='jsp/admin/plugins/wiki/modules/ai/ManageAiFeatures.jsp' boxed=true boxTitle='#i18n{module.wiki.ai.modify_feature.title}' boxColor='primary'>
+      <@input type='hidden' name='id' value='${feature.id}' />
+
+      <@formGroup labelFor='name' labelKey='#i18n{module.wiki.ai.modify_feature.labelName}' mandatory=true>
+        <@input type='text' name='name' id='name' value=feature.name!'' maxlength=255 />
+      </@formGroup>
+
+      <@formGroup labelFor='type' labelKey='#i18n{module.wiki.ai.modify_feature.labelType}' mandatory=true>
+        <@select name='type' id='type'>
+          <@option label='#i18n{module.wiki.ai.modify_feature.typeReplace}' value='replace' selected=(feature.type!'')=='replace' />
+          <@option label='#i18n{module.wiki.ai.modify_feature.typeInsertBefore}' value='insertBefore' selected=(feature.type!'')=='insertBefore' />
+          <@option label='#i18n{module.wiki.ai.modify_feature.typeInsertAfter}' value='insertAfter' selected=(feature.type!'')=='insertAfter' />
+        </@select>
+      </@formGroup>
+
+      <@formGroup labelFor='display_mode' labelKey='#i18n{module.wiki.ai.modify_feature.labelDisplayMode}' mandatory=true>
+        <@select name='display_mode' id='display_mode'>
+          <@option label='#i18n{module.wiki.ai.modify_feature.displayModeDropdown}' value='dropdown' selected=(feature.displayMode!'dropdown')=='dropdown' />
+          <@option label='#i18n{module.wiki.ai.modify_feature.displayModeButton}' value='button' selected=(feature.displayMode!'dropdown')=='button' />
+        </@select>
+      </@formGroup>
+
+      <@formGroup labelFor='prompt_template' labelKey='#i18n{module.wiki.ai.modify_feature.labelPromptTemplate}' mandatory=true>
+        <@input type='textarea' name='prompt_template' id='prompt_template' rows=6>${feature.promptTemplate!''}</@input>
+      </@formGroup>
+
+      <@formGroup labelFor='active' labelKey='#i18n{module.wiki.ai.modify_feature.labelActive}'>
+        <@checkBox name='active' id='active' value='1' checked=feature.active!true />
+      </@formGroup>
+
+      <@formGroup labelFor='order' labelKey='#i18n{module.wiki.ai.modify_feature.labelOrder}'>
+        <@select name='order' id='order'>
+          <#list 1..feature_list?size as i>
+            <@option value=i label='${i}' selected=(feature.order!1)==i />
+          </#list>
+        </@select>
+      </@formGroup>
+
+      <@formGroup rows=2>
+        <@button type='submit' name='action_modifyFeature' title='#i18n{module.wiki.ai.modify_feature.buttonValidate}' />
+        <@aButton href='jsp/admin/plugins/wiki/modules/ai/ManageAiFeatures.jsp?view=manageFeatures'
+                  title='#i18n{portal.admin.message.buttonCancel}'
+                  color='secondary' />
+      </@formGroup>
+    </@tform>
+  </@pageColumn>
+</@pageContainer>

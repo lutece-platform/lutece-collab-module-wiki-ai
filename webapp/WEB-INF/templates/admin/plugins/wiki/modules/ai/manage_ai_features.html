@@ -1,0 +1,79 @@
+<#ftl output_format="HTML">
+<@pageContainer>
+  <@pageColumn>
+    <@pageHeader title='#i18n{module.wiki.ai.manage_features.pageTitle}'>
+      <@aButton href='jsp/admin/plugins/wiki/modules/ai/ManageAiFeatures.jsp?view=createFeature'
+                title='#i18n{module.wiki.ai.manage_features.buttonCreate}'
+                buttonIcon='plus'
+                color='primary' />
+    </@pageHeader>
+
+    <@messages />
+
+    <@table>
+          <thead>
+            <tr>
+              <th>#i18n{module.wiki.ai.manage_features.columnName}</th>
+              <th>#i18n{module.wiki.ai.manage_features.columnType}</th>
+              <th>#i18n{module.wiki.ai.manage_features.columnDisplayMode}</th>
+              <th>#i18n{module.wiki.ai.manage_features.columnActive}</th>
+              <th>#i18n{module.wiki.ai.manage_features.columnOrder}</th>
+              <th>#i18n{module.wiki.ai.manage_features.columnActions}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <#if feature_list?? && feature_list?has_content>
+              <#list feature_list as feature>
+                <tr>
+                  <td><strong>${feature.name}</strong></td>
+                  <td>
+                    <#if feature.type == 'replace'>
+                      <@tag color='light'>#i18n{module.wiki.ai.create_feature.typeReplace}</@tag>
+                    <#elseif feature.type == 'insertBefore'>
+                      <@tag color='light'>#i18n{module.wiki.ai.create_feature.typeInsertBefore}</@tag>
+                    <#elseif feature.type == 'insertAfter'>
+                      <@tag color='light'>#i18n{module.wiki.ai.create_feature.typeInsertAfter}</@tag>
+                    <#else>
+                      <@tag color='light'>${feature.type}</@tag>
+                    </#if>
+                  </td>
+                  <td>
+                    <#if (feature.displayMode!'dropdown') == 'button'>
+                      <@tag color='primary'>#i18n{module.wiki.ai.manage_features.displayModeButton}</@tag>
+                    <#else>
+                      <@tag color='light'>#i18n{module.wiki.ai.manage_features.displayModeDropdown}</@tag>
+                    </#if>
+                  </td>
+                  <td>
+                    <#if feature.active>
+                      <@tag color='success'>#i18n{module.wiki.ai.manage_features.active}</@tag>
+                    <#else>
+                      <@tag color='secondary'>#i18n{module.wiki.ai.manage_features.inactive}</@tag>
+                    </#if>
+                  </td>
+                  <td>${feature.order}</td>
+                  <td>
+                    <@aButton href='jsp/admin/plugins/wiki/modules/ai/ManageAiFeatures.jsp?view=modifyFeature&id_feature=${feature.id}'
+                              title='#i18n{module.wiki.ai.manage_features.buttonModify}'
+                              buttonIcon='edit'
+                              size='sm'
+                              color='primary' />
+                    <@aButton href='jsp/admin/plugins/wiki/modules/ai/ManageAiFeatures.jsp?action=confirmRemoveFeature&id_feature=${feature.id}'
+                              title='#i18n{module.wiki.ai.manage_features.buttonRemove}'
+                              buttonIcon='trash'
+                              size='sm'
+                              color='danger' />
+                  </td>
+                </tr>
+              </#list>
+            </#if>
+          </tbody>
+        </@table>
+
+    <#if !feature_list?? || !feature_list?has_content>
+      <@alert color='info'>
+        #i18n{module.wiki.ai.manage_features.noFeatures}
+      </@alert>
+    </#if>
+  </@pageColumn>
+</@pageContainer>

@@ -1,0 +1,181 @@
+<#ftl output_format="HTML">
+<#if book??>
+    <div class="row">
+        <div class="wiki-sidebar-col">
+            <div class="sticky-top">
+                <#include "../../commons/sidebar.html">
+            </div>
+        </div>
+        <div class="col px-5 pt-0 wiki-markdown-col">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h1 class="mb-2">#i18n{module.wiki.ai.quizGeneration.review.title}</h1>
+                    <#if quiz??>
+                        <p class="text-muted mb-0">${quiz.title}</p>
+                    </#if>
+                </div>
+                <#if quiz??>
+                    <a href="jsp/site/Portal.jsp?page=wikiaiQuizGeneration&view=viewWorkflows&quiz_id=${quiz.id}" class="btn btn-light rounded-pill px-4">
+                        <i class="ti ti-arrow-left me-2"></i>#i18n{portal.util.labelBack}
+                    </a>
+                </#if>
+            </div>
+
+            <#include "../../commons/messages.html" />
+
+            <#if questions?? && questions?size gt 0>
+                <#assign typeCount = {}>
+                <#assign sourcePages = {}>
+                <#assign sourceCount = {}>
+                <#list questions as q>
+                    <#assign typeCount = typeCount + {q.questionType: (typeCount[q.questionType]!0) + 1}>
+                    <#list q.sourcePages as page>
+                        <#assign sourceKey = page.id?c>
+                        <#assign sourcePages = sourcePages + {sourceKey: page}>
+                        <#assign sourceCount = sourceCount + {sourceKey: (sourceCount[sourceKey]!0) + 1}>
+                    </#list>
+                </#list>
+
+                <div class="card" style="border-radius: 20px;">
+                    <div class="card-header bg-transparent p-4">
+                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+                            <div class="d-flex flex-wrap gap-2">
+                                <select class="form-select form-select-sm" id="type-filter" style="width: auto;">
+                                    <option value="all">#i18n{module.wiki.ai.quizGeneration.review.filterAll} (${questions?size})</option>
+                                    <#if typeCount["MCQ"]??><option value="MCQ">#i18n{module.wiki.quiz.quizQuestion.type.mcq} (${typeCount["MCQ"]})</option></#if>
+                                    <#if typeCount["TRUE_FALSE"]??><option value="TRUE_FALSE">#i18n{module.wiki.quiz.quizQuestion.type.trueFalse} (${typeCount["TRUE_FALSE"]})</option></#if>
+                                    <#if typeCount["MATCHING"]??><option value="MATCHING">#i18n{module.wiki.quiz.quizQuestion.type.matching} (${typeCount["MATCHING"]})</option></#if>
+                                    <#if typeCount["ORDERING"]??><option value="ORDERING">#i18n{module.wiki.quiz.quizQuestion.type.ordering} (${typeCount["ORDERING"]})</option></#if>
+                                </select>
+                                <select class="form-select form-select-sm" id="source-filter" style="width: auto;">
+                                    <option value="all">#i18n{module.wiki.ai.quizGeneration.review.filterAll} (${questions?size})</option>
+                                    <#list sourcePages?keys as sourceId>
+                                        <#assign page = sourcePages[sourceId]>
+                                        <option value="${sourceId}"><#if page.currentRevision?? && page.currentRevision.title?has_content>${page.currentRevision.title}<#else>${page.code}</#if> (${sourceCount[sourceId]})</option>
+                                    </#list>
+                                </select>
+                            </div>
+                            <a href="jsp/site/Portal.jsp?page=wikiaiQuizGeneration&action=importAll&workflow_id=${workflow.id}&token=${token}" class="btn btn-dark btn-sm rounded-pill px-3">
+                                <i class="ti ti-download me-2"></i>#i18n{module.wiki.ai.quizGeneration.importAll} (${questions?size})
+                            </a>
+                        </div>
+                    </div>
+                    <div class="card-body p-4">
+                        <#list questions as question>
+                            <div class="question-item mb-4 pb-4 <#if question?has_next>border-bottom</#if>" data-type="${question.questionType}" data-source="<#list question.sourcePages as p>${p.id?c}<#if p?has_next>,</#if></#list>">
+                                <div class="d-flex justify-content-between align-items-start mb-3">
+                                    <div>
+                                        <strong>${question.questionText}</strong>
+                                        <#if question.sourcePages?size gt 0>
+                                            <div class="small text-muted">
+                                                <#list question.sourcePages as page>
+                                                    <i class="ti ti-file-text me-1"></i><#if page.currentRevision?? && page.currentRevision.title?has_content>${page.currentRevision.title}<#else>${page.code}</#if><#if page?has_next>, </#if>
+                                                </#list>
+                                            </div>
+                                        </#if>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="jsp/site/Portal.jsp?page=wikiaiQuizGeneration&action=importQuestion&question_id=${question.id}&workflow_id=${workflow.id}&token=${token}" class="btn btn-light">
+                                                <i class="ti ti-download me-1"></i>#i18n{module.wiki.ai.quizGeneration.import}
+                                            </a>
+                                            <a href="jsp/site/Portal.jsp?page=wikiaiQuizGeneration&action=discardQuestion&question_id=${question.id}&workflow_id=${workflow.id}&token=${token}" class="btn btn-light text-danger">
+                                                <i class="ti ti-x"></i>
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mt-3">
+                                    <#if question.answers?? && question.answers?size gt 0>
+                                        <#if question.questionType == "MCQ" || question.questionType == "TRUE_FALSE">
+                                            <#list question.answers as answer>
+                                                <div class="d-flex align-items-center mb-2 p-2 rounded <#if answer.isCorrect>bg-success bg-opacity-10<#else>bg-light</#if>">
+                                                    <#if answer.isCorrect>
+                                                        <i class="ti ti-circle-check me-2 text-success"></i>
+                                                    <#else>
+                                                        <i class="ti ti-circle me-2 text-muted"></i>
+                                                    </#if>
+                                                    <span <#if answer.isCorrect>class="fw-semibold text-success"</#if>>${answer.answerText!''}</span>
+                                                    <#if answer.isCorrect>
+                                                        <span class="badge ms-auto text-success-emphasis bg-success-subtle border border-success-subtle">#i18n{module.wiki.ai.quizGeneration.review.correctAnswer}</span>
+                                                    </#if>
+                                                </div>
+                                            </#list>
+
+                                        <#elseif question.questionType == "MATCHING">
+                                            <#list question.answers as answer>
+                                                <div class="row mb-2 align-items-start">
+                                                    <div class="col-5">
+                                                        <span class="d-block bg-light p-2 rounded">${answer.answerText!''}</span>
+                                                    </div>
+                                                    <div class="col-1 text-center pt-2">
+                                                        <i class="ti ti-arrow-right text-muted"></i>
+                                                    </div>
+                                                    <div class="col-6">
+                                                        <span class="d-block bg-success bg-opacity-10 text-success p-2 rounded">${answer.matchTarget!''}</span>
+                                                    </div>
+                                                </div>
+                                            </#list>
+
+                                        <#elseif question.questionType == "ORDERING">
+                                            <ol class="list-group list-group-numbered">
+                                                <#list question.answers?sort_by("correctOrder") as answer>
+                                                    <li class="list-group-item py-2 px-3 bg-success bg-opacity-10">${answer.answerText!''}</li>
+                                                </#list>
+                                            </ol>
+                                        </#if>
+                                    </#if>
+                                </div>
+
+                                <#if question.explanation?? && question.explanation?has_content>
+                                    <div class="mt-2 small text-muted fst-italic">
+                                        <strong>#i18n{module.wiki.ai.quizGeneration.review.explanation}:</strong> ${question.explanation}
+                                    </div>
+                                </#if>
+                            </div>
+                        </#list>
+                    </div>
+                </div>
+            <#else>
+                <div class="card" style="border-radius: 20px;">
+                    <div class="card-body p-5 text-center">
+                        <p class="text-muted mb-0">#i18n{module.wiki.ai.quizGeneration.noQuestionsToReview}</p>
+                    </div>
+                </div>
+            </#if>
+        </div>
+    </div>
+<#else>
+    <div class="container py-4">
+        <div class="alert alert-warning">
+            #i18n{module.wiki.ai.quizGeneration.error.bookNotFound}
+        </div>
+    </div>
+</#if>
+
+<#if is_module_ai_present?? && is_module_ai_present>
+    <#include "/skin/plugins/wiki/modules/ai/chat.html">
+</#if>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var typeFilter = document.getElementById('type-filter');
+    var sourceFilter = document.getElementById('source-filter');
+
+    function applyFilters() {
+        var currentType = typeFilter ? typeFilter.value : 'all';
+        var currentSource = sourceFilter ? sourceFilter.value : 'all';
+
+        document.querySelectorAll('.question-item').forEach(function(item) {
+            var typeMatch = currentType === 'all' || item.dataset.type === currentType;
+            var sources = item.dataset.source.split(',');
+            var sourceMatch = currentSource === 'all' || sources.indexOf(currentSource) !== -1;
+            item.style.display = (typeMatch && sourceMatch) ? '' : 'none';
+        });
+    }
+
+    if (typeFilter) typeFilter.addEventListener('change', applyFilters);
+    if (sourceFilter) sourceFilter.addEventListener('change', applyFilters);
+});
+</script>

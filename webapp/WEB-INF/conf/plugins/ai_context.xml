@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:context="http://www.springframework.org/schema/context"
+	xmlns:tx="http://www.springframework.org/schema/tx" xmlns:jdbc="http://www.springframework.org/schema/jdbc"
+	xmlns:p="http://www.springframework.org/schema/p"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans
+       http://www.springframework.org/schema/beans/spring-beans-3.0.xsd
+       http://www.springframework.org/schema/context
+       http://www.springframework.org/schema/context/spring-context-3.0.xsd
+       http://www.springframework.org/schema/tx
+       http://www.springframework.org/schema/tx/spring-tx-3.0.xsd">
+
+
+  <bean id="wiki-ai.embeddingModel" class="fr.paris.lutece.plugins.wiki.modules.ai.service.model.LangChain4jModelFactory">
+    <property name="modelClass" value="dev.langchain4j.model.azure.AzureOpenAiEmbeddingModel" />
+    <property name="properties">
+      <map>
+        <entry key="endpoint" value="https://example.openai.azure.com/" />
+        <entry key="apiKey" value="**" />
+        <entry key="deploymentName" value="text-embedding-ada-002" />
+      </map>
+    </property>
+  </bean>
+
+  <bean id="wiki-ai.streamingChatModel" class="fr.paris.lutece.plugins.wiki.modules.ai.service.model.LangChain4jModelFactory">
+    <property name="modelClass" value="dev.langchain4j.model.azure.AzureOpenAiStreamingChatModel" />
+    <property name="properties">
+      <map>
+        <entry key="endpoint" value="https://example.openai.azure.com/" />
+        <entry key="apiKey" value="**" />
+        <entry key="deploymentName" value="gpt-4.1-mini" />
+        <entry key="temperature" value="0.7" />
+      </map>
+    </property>
+  </bean>
+
+  <bean id="wiki-ai.chatModel" class="fr.paris.lutece.plugins.wiki.modules.ai.service.model.LangChain4jModelFactory">
+    <property name="modelClass" value="dev.langchain4j.model.azure.AzureOpenAiChatModel" />
+    <property name="properties">
+      <map>
+        <entry key="endpoint" value="https://example.openai.azure.com/" />
+        <entry key="apiKey" value="**" />
+        <entry key="deploymentName" value="gpt-4.1-mini" />
+        <entry key="temperature" value="0.7" />
+      </map>
+    </property>
+  </bean>
+
+  <bean id="wiki-ai.aiFeatureDAO" class="fr.paris.lutece.plugins.wiki.modules.ai.business.AiFeatureDAO" />
+  <bean id="wiki-ai.aiUserRateLimitDAO" class="fr.paris.lutece.plugins.wiki.modules.ai.business.AiUserRateLimitDAO" />
+  <bean id="wiki-ai.quizGenerationWorkflowDAO" class="fr.paris.lutece.plugins.wiki.modules.ai.business.QuizGenerationWorkflowDAO" />
+  <bean id="wiki-ai.quizGeneratedQuestionDAO" class="fr.paris.lutece.plugins.wiki.modules.ai.business.QuizGeneratedQuestionDAO" />
+  <bean id="wiki-ai.quizGeneratedAnswerDAO" class="fr.paris.lutece.plugins.wiki.modules.ai.business.QuizGeneratedAnswerDAO" />
+  <bean id="wiki-ai.wikiAIIndexerActionDAO" class="fr.paris.lutece.plugins.wiki.modules.ai.business.WikiAIIndexerActionDAO" />
+
+  <bean id="wiki-ai.WikiAIChatRest" class="fr.paris.lutece.plugins.wiki.modules.ai.rs.WikiAIChatRest" />
+  <bean id="wiki-ai.AiFeatureRest" class="fr.paris.lutece.plugins.wiki.modules.ai.rs.AiFeatureRest" />
+  <bean id="wiki-ai.IndexationRest" class="fr.paris.lutece.plugins.wiki.modules.ai.rs.IndexationRest" />
+  <bean id="wiki-ai.QuizGenerationRest" class="fr.paris.lutece.plugins.wiki.modules.ai.rs.QuizGenerationRest" />
+
+</beans>
