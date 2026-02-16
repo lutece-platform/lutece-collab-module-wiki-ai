@@ -39,7 +39,10 @@ import fr.paris.lutece.plugins.wiki.modules.ai.business.QuizGenerationWorkflow;
 import fr.paris.lutece.plugins.wiki.modules.ai.business.QuizGenerationWorkflowHome;
 import fr.paris.lutece.portal.service.daemon.Daemon;
 import fr.paris.lutece.portal.service.util.AppLogService;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
+@ApplicationScoped
 public class QuizGenerationDaemon extends Daemon
 {
     private static final String LOG_START = "QuizGenerationDaemon: Starting...";
@@ -47,7 +50,11 @@ public class QuizGenerationDaemon extends Daemon
     private static final String LOG_PROCESSING = "QuizGenerationDaemon: Processing workflow #";
     private static final String LOG_COMPLETED = "QuizGenerationDaemon: Completed workflow #";
     private static final String LOG_ERROR = "QuizGenerationDaemon: Error processing workflow #";
+    private static final String LOG_ERROR_PARAMETERIZED = "QuizGenerationDaemon: Error processing workflow #{}";
     private static final String NEWLINE = "\r\n";
+
+    @Inject
+    private QuizGenerationService _quizGenerationService;
 
     @Override
     public void run( )
@@ -69,13 +76,13 @@ public class QuizGenerationDaemon extends Daemon
 
         try
         {
-            QuizGenerationService.getInstance( ).processWorkflow( workflow );
+            _quizGenerationService.processWorkflow( workflow );
             sbLogs.append( LOG_COMPLETED ).append( workflow.getId( ) ).append( NEWLINE );
         }
         catch( Exception e )
         {
             sbLogs.append( LOG_ERROR ).append( workflow.getId( ) ).append( ": " ).append( e.getMessage( ) ).append( NEWLINE );
-            AppLogService.error( LOG_ERROR + workflow.getId( ), e );
+            AppLogService.error( LOG_ERROR_PARAMETERIZED, workflow.getId( ), e );
         }
 
         setLastRunLogs( sbLogs.toString( ) );

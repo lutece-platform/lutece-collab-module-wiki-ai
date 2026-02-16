@@ -39,10 +39,12 @@ import java.util.List;
 
 import fr.paris.lutece.portal.service.plugin.Plugin;
 import fr.paris.lutece.util.sql.DAOUtil;
+import jakarta.enterprise.context.ApplicationScoped;
 
 /**
  * WikiAIIndexerActionDAO provides data access methods for WikiAIIndexerAction objects
  */
+@ApplicationScoped
 public class WikiAIIndexerActionDAO implements IWikiAIIndexerActionDAO
 {
     private static final String SQL_QUERY_INSERT = "INSERT INTO wiki_ai_indexer_action ( id_document, id_task ) VALUES ( ?, ? )";

@@ -42,7 +42,6 @@ import dev.langchain4j.service.AiServices;
 import dev.langchain4j.service.TokenStream;
 import fr.paris.lutece.plugins.wiki.modules.ai.business.IWikiAssistant;
 import fr.paris.lutece.plugins.wiki.modules.ai.service.chat.MemoryService;
-import fr.paris.lutece.plugins.wiki.modules.ai.service.model.ModelService;
 import fr.paris.lutece.plugins.wiki.modules.ai.service.tools.WikiBrowseBookTool;
 import fr.paris.lutece.plugins.wiki.modules.ai.service.tools.WikiBrowseSpaceTool;
 import fr.paris.lutece.plugins.wiki.modules.ai.service.tools.WikiGrepTool;
@@ -52,7 +51,11 @@ import fr.paris.lutece.plugins.wiki.modules.ai.service.tools.WikiSearchInSpaceTo
 import fr.paris.lutece.plugins.wiki.modules.ai.service.tools.WikiSearchTool;
 import fr.paris.lutece.portal.service.security.LuteceUser;
 import fr.paris.lutece.portal.service.util.AppLogService;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import jakarta.inject.Named;
 
+@ApplicationScoped
 public class RAGService
 {
     public static class StreamingContext
@@ -146,30 +149,21 @@ public class RAGService
             + "- If the question is off-topic (not related to wiki content), politely redirect to wiki-related questions\n\n"
             + "If information is not found after thorough investigation, state it clearly and suggest alternative approaches (different keywords, exploring spaces).";
 
-    private static final String ERROR_SECURITY_STREAMING = "Security error during streaming chat: ";
-    private static final String ERROR_STREAMING_CHAT = "Error during streaming chat for query: ";
+    private static final String ERROR_SECURITY_STREAMING = "Security error during streaming chat: {}";
+    private static final String ERROR_STREAMING_CHAT = "Error during streaming chat for query: {}";
 
-    private static class SingletonHolder
-    {
-        static final RAGService INSTANCE = new RAGService( );
-    }
+    @Inject
+    @Named( "wiki-ai.streamingChatModel" )
+    private StreamingChatModel _streamingChatModel;
 
-    private RAGService( )
-    {
-    }
-
-    public static RAGService getInstance( )
-    {
-        return SingletonHolder.INSTANCE;
-    }
+    @Inject
+    private MemoryService _memoryService;
 
     public StreamingContext chatWithStreaming( String query, String conversationId, LuteceUser user, String streamId, Locale locale, String fromUrl )
     {
         try
         {
-            StreamingChatModel chatModel = ModelService.getInstance( ).getStreamingChatModel( );
-            MemoryService memoryService = MemoryService.getInstance( );
-            ChatMemory chatMemory = memoryService.getChatMemory( conversationId, user );
+            ChatMemory chatMemory = _memoryService.getChatMemory( conversationId, user );
 
             if ( chatMemory.messages( ).isEmpty( ) )
             {
@@ -185,7 +179,7 @@ public class RAGService
             WikiBrowseSpaceTool browseSpaceTool = new WikiBrowseSpaceTool( user );
             WikiBrowseBookTool browseBookTool = new WikiBrowseBookTool( user );
 
-            IWikiAssistant assistant = AiServices.builder( IWikiAssistant.class ).streamingChatModel( chatModel ).chatMemory( chatMemory )
+            IWikiAssistant assistant = AiServices.builder( IWikiAssistant.class ).streamingChatModel( _streamingChatModel ).chatMemory( chatMemory )
                     .tools( searchTool, searchInSpaceTool, grepTool, readContentTool, listSpacesTool, browseSpaceTool, browseBookTool ).build( );
 
             TokenStream tokenStream = assistant.chatStream( query );
@@ -194,12 +188,12 @@ public class RAGService
         }
         catch( SecurityException e )
         {
-            AppLogService.error( ERROR_SECURITY_STREAMING + e.getMessage( ), e );
+            AppLogService.error( ERROR_SECURITY_STREAMING, e.getMessage( ), e );
             return null;
         }
         catch( Exception e )
         {
-            AppLogService.error( ERROR_STREAMING_CHAT + query, e );
+            AppLogService.error( ERROR_STREAMING_CHAT, query, e );
             return null;
         }
     }

@@ -36,11 +36,12 @@ package fr.paris.lutece.plugins.wiki.modules.ai.rs;
 import java.util.HashMap;
 import java.util.Map;
 
-import javax.ws.rs.core.MediaType;
-import javax.ws.rs.core.Response;
-import javax.ws.rs.sse.OutboundSseEvent;
-import javax.ws.rs.sse.Sse;
-import javax.ws.rs.sse.SseEventSink;
+import jakarta.inject.Inject;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.sse.OutboundSseEvent;
+import jakarta.ws.rs.sse.Sse;
+import jakarta.ws.rs.sse.SseEventSink;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -58,7 +59,8 @@ public abstract class AbstractRestEndpoint
     private static final String LOG_ERROR_SENDING_ERROR_EVENT = "Error sending error event";
     private static final String LOG_ERROR_CLOSING_SINK = "Error closing event sink";
 
-    private final WikiEventService _eventService = WikiEventService.getInstance( );
+    @Inject
+    private WikiEventService _eventService;
 
     /**
      * Creates an error response with the specified status and message.
@@ -101,7 +103,7 @@ public abstract class AbstractRestEndpoint
      */
     protected Response handleException( Exception e, String logContext )
     {
-        AppLogService.error( logContext + e.getMessage( ), e );
+        AppLogService.error( "{}{}", logContext, e.getMessage( ), e );
         return createErrorResponse( Response.Status.INTERNAL_SERVER_ERROR, WikiAIRestConstants.ERROR_INTERNAL );
     }
 

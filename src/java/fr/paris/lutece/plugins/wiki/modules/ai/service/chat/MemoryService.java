@@ -47,7 +47,10 @@ import fr.paris.lutece.portal.service.init.ShutdownService;
 import fr.paris.lutece.portal.service.security.LuteceUser;
 import fr.paris.lutece.portal.service.util.AppLogService;
 import fr.paris.lutece.portal.service.util.AppPropertiesService;
+import jakarta.annotation.PostConstruct;
+import jakarta.enterprise.context.ApplicationScoped;
 
+@ApplicationScoped
 public class MemoryService implements ShutdownService
 {
     private static final int DEFAULT_MAX_MESSAGES_PER_CONVERSATION = 20;
@@ -62,15 +65,11 @@ public class MemoryService implements ShutdownService
     private static final String ERROR_INVALID_CONVERSATION_ID = "Invalid conversation ID";
     private static final String ERROR_ACCESS_DENIED = "Access denied: conversation does not belong to user";
     private static final String ERROR_CONVERSATION_EXPIRED = "Conversation has expired";
-    private static final String LOG_ACCESS_NON_EXISTENT = "Attempted access to non-existent conversation: ";
-    private static final String LOG_BY_USER = " by user: ";
-    private static final String LOG_USER_ACCESS_DENIED = "User ";
-    private static final String LOG_ATTEMPTED_ACCESS = " attempted to access conversation belonging to ";
+    private static final String LOG_ACCESS_NON_EXISTENT = "Attempted access to non-existent conversation: {} by user: {}";
+    private static final String LOG_USER_ACCESS_DENIED = "User {} attempted to access conversation belonging to {}";
     private static final String LOG_ERROR_CLEANUP = "Error during conversation cleanup";
-    private static final String LOG_CLEANUP_STARTED = "Started conversation cleanup task (interval: ";
-    private static final String LOG_MINUTES = " minutes)";
-    private static final String LOG_CLEANED_UP = "Cleaned up ";
-    private static final String LOG_EXPIRED_CONVERSATIONS = " expired conversations";
+    private static final String LOG_CLEANUP_STARTED = "Started conversation cleanup task (interval: {} minutes)";
+    private static final String LOG_CLEANED_UP = "Cleaned up {} expired conversations";
     private static final String LOG_SHUTTING_DOWN = "Shutting down MemoryService...";
     private static final String LOG_SHUTDOWN_COMPLETE = "MemoryService shutdown complete";
     private static final String SERVICE_NAME = "MemoryService";
@@ -83,14 +82,9 @@ public class MemoryService implements ShutdownService
     private static final long CLEANUP_INTERVAL_MINUTES = AppPropertiesService.getPropertyLong( PROPERTY_CLEANUP_INTERVAL_MINUTES,
             DEFAULT_CLEANUP_INTERVAL_MINUTES );
 
-    private static class SingletonHolder
-    {
-        static final MemoryService INSTANCE = new MemoryService( );
-    }
-
-    private final InMemoryChatMemoryStore _chatMemoryStore;
-    private final Map<String, ConversationMetadata> _conversationMetadata;
-    private final ScheduledExecutorService _cleanupScheduler;
+    private InMemoryChatMemoryStore _chatMemoryStore;
+    private Map<String, ConversationMetadata> _conversationMetadata;
+    private ScheduledExecutorService _cleanupScheduler;
 
     /**
      * Metadata for a conversation including ownership and access tracking
@@ -133,25 +127,16 @@ public class MemoryService implements ShutdownService
     }
 
     /**
-     * Private constructor initializing the memory service with configuration
+     * Initializes the memory service after CDI construction.
      */
-    private MemoryService( )
+    @PostConstruct
+    public void init( )
     {
         _chatMemoryStore = new InMemoryChatMemoryStore( );
         _conversationMetadata = new ConcurrentHashMap<>( );
         _cleanupScheduler = Executors.newSingleThreadScheduledExecutor( );
 
         startCleanupTask( );
-    }
-
-    /**
-     * Gets the singleton instance of the MemoryService
-     *
-     * @return The MemoryService instance
-     */
-    public static MemoryService getInstance( )
-    {
-        return SingletonHolder.INSTANCE;
     }
 
     /**
@@ -267,13 +252,13 @@ public class MemoryService implements ShutdownService
 
         if ( metadata == null )
         {
-            AppLogService.error( LOG_ACCESS_NON_EXISTENT + conversationId + LOG_BY_USER + user.getName( ) );
+            AppLogService.error( LOG_ACCESS_NON_EXISTENT, conversationId, user.getName( ) );
             throw new SecurityException( ERROR_INVALID_CONVERSATION_ID );
         }
 
         if ( !metadata.userName.equals( user.getName( ) ) )
         {
-            AppLogService.error( LOG_USER_ACCESS_DENIED + user.getName( ) + LOG_ATTEMPTED_ACCESS + metadata.userName );
+            AppLogService.error( LOG_USER_ACCESS_DENIED, user.getName( ), metadata.userName );
             throw new SecurityException( ERROR_ACCESS_DENIED );
         }
 
@@ -312,7 +297,7 @@ public class MemoryService implements ShutdownService
             }
         }, CLEANUP_INTERVAL_MINUTES, CLEANUP_INTERVAL_MINUTES, TimeUnit.MINUTES );
 
-        AppLogService.info( LOG_CLEANUP_STARTED + CLEANUP_INTERVAL_MINUTES + LOG_MINUTES );
+        AppLogService.info( LOG_CLEANUP_STARTED, CLEANUP_INTERVAL_MINUTES );
     }
 
     /**
@@ -333,7 +318,7 @@ public class MemoryService implements ShutdownService
 
         if ( removedCount > 0 )
         {
-            AppLogService.info( LOG_CLEANED_UP + removedCount + LOG_EXPIRED_CONVERSATIONS );
+            AppLogService.info( LOG_CLEANED_UP, removedCount );
         }
     }
 }

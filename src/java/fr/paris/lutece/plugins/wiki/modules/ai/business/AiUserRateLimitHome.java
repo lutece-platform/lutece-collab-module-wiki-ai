@@ -36,7 +36,7 @@ package fr.paris.lutece.plugins.wiki.modules.ai.business;
 import fr.paris.lutece.plugins.wiki.modules.ai.service.WikiAIPlugin;
 import fr.paris.lutece.portal.service.plugin.Plugin;
 import fr.paris.lutece.portal.service.plugin.PluginService;
-import fr.paris.lutece.portal.service.spring.SpringContextService;
+import jakarta.enterprise.inject.spi.CDI;
 
 import java.sql.Timestamp;
 import java.util.Optional;
@@ -46,7 +46,7 @@ import java.util.Optional;
  */
 public final class AiUserRateLimitHome
 {
-    private static IAiUserRateLimitDAO _dao = SpringContextService.getBean( "wiki-ai.aiUserRateLimitDAO" );
+    private static IAiUserRateLimitDAO _dao = CDI.current( ).select( IAiUserRateLimitDAO.class ).get( );
     private static Plugin _plugin = PluginService.getPlugin( WikiAIPlugin.PLUGIN_NAME );
 
     /**

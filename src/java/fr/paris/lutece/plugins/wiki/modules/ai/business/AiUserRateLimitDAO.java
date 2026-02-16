@@ -35,6 +35,7 @@ package fr.paris.lutece.plugins.wiki.modules.ai.business;
 
 import fr.paris.lutece.portal.service.plugin.Plugin;
 import fr.paris.lutece.util.sql.DAOUtil;
+import jakarta.enterprise.context.ApplicationScoped;
 
 import java.sql.Statement;
 import java.sql.Timestamp;
@@ -43,6 +44,7 @@ import java.util.Optional;
 /**
  * This class provides Data Access methods for AiUserRateLimit objects
  */
+@ApplicationScoped
 public class AiUserRateLimitDAO implements IAiUserRateLimitDAO
 {
     private static final String SQL_QUERY_INSERT = "INSERT INTO wiki_ai_user_rate_limit (user_id, message_count, date_first_message) VALUES (?, ?, ?)";

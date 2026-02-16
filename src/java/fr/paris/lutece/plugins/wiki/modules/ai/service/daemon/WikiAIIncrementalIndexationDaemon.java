@@ -44,10 +44,13 @@ import fr.paris.lutece.plugins.wiki.modules.ai.service.WikiAIPlugin;
 import fr.paris.lutece.plugins.wiki.modules.ai.service.rag.EmbeddingService;
 import fr.paris.lutece.portal.service.daemon.Daemon;
 import fr.paris.lutece.portal.service.util.AppLogService;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 /**
  * WikiAIIncrementalIndexationDaemon Daemon for processing incremental indexation of Wiki AI items
  */
+@ApplicationScoped
 public class WikiAIIncrementalIndexationDaemon extends Daemon
 {
     private static final String UNDERSCORE_SEPARATOR = "_";
@@ -57,10 +60,14 @@ public class WikiAIIncrementalIndexationDaemon extends Daemon
     private static final String LOG_TASK_MODIFY = " - Task: MODIFY - Document: ";
     private static final String LOG_TASK_DELETE = " - Task: DELETE - Document: ";
     private static final String LOG_ERROR = "Error processing action #";
+    private static final String LOG_ERROR_PARAMETERIZED = "Error processing action #{}: {}";
     private static final String LOG_COMPLETED = "WikiAIIncrementalIndexationDaemon: Completed. Processed ";
     private static final String LOG_ACTIONS = " actions.";
-    private static final String ERROR_INVALID_DOCUMENT_ID = "Invalid document ID format: ";
+    private static final String ERROR_INVALID_DOCUMENT_ID = "Invalid document ID format: {}";
     private static final String NEWLINE = "\r\n";
+
+    @Inject
+    private EmbeddingService _embeddingService;
 
     /**
      * {@inheritDoc}
@@ -109,7 +116,7 @@ public class WikiAIIncrementalIndexationDaemon extends Daemon
             {
                 String errorMsg = LOG_ERROR + action.getIdAction( ) + ": " + e.getMessage( );
                 sbLogs.append( errorMsg ).append( NEWLINE );
-                AppLogService.error( errorMsg, e );
+                AppLogService.error( LOG_ERROR_PARAMETERIZED, action.getIdAction( ), e.getMessage( ), e );
             }
         }
 
@@ -129,13 +136,13 @@ public class WikiAIIncrementalIndexationDaemon extends Daemon
 
         if ( parts.length < 2 )
         {
-            AppLogService.error( ERROR_INVALID_DOCUMENT_ID + action.getIdDocument( ) );
+            AppLogService.error( ERROR_INVALID_DOCUMENT_ID, action.getIdDocument( ) );
             return;
         }
 
         int entityId = Integer.parseInt( parts [1] );
 
-        EmbeddingService.getInstance( ).indexItem( entityId );
+        _embeddingService.indexItem( entityId );
     }
 
     /**
@@ -150,7 +157,7 @@ public class WikiAIIncrementalIndexationDaemon extends Daemon
 
         if ( parts.length < 2 )
         {
-            AppLogService.error( ERROR_INVALID_DOCUMENT_ID + action.getIdDocument( ) );
+            AppLogService.error( ERROR_INVALID_DOCUMENT_ID, action.getIdDocument( ) );
             return;
         }
 
@@ -160,15 +167,15 @@ public class WikiAIIncrementalIndexationDaemon extends Daemon
         switch( resourceType.toLowerCase( ) )
         {
             case Space.RESOURCE_TYPE:
-                EmbeddingService.getInstance( ).removeSpace( entityId );
+                _embeddingService.removeSpace( entityId );
                 break;
 
             case Book.RESOURCE_TYPE:
-                EmbeddingService.getInstance( ).removeBook( entityId );
+                _embeddingService.removeBook( entityId );
                 break;
 
             case Page.RESOURCE_TYPE:
-                EmbeddingService.getInstance( ).removePage( entityId );
+                _embeddingService.removePage( entityId );
                 break;
 
             default:

@@ -55,6 +55,7 @@ import fr.paris.lutece.plugins.wiki.service.WikiItemService;
 import fr.paris.lutece.plugins.wiki.service.security.WikiAccessControlService;
 import fr.paris.lutece.portal.service.security.LuteceUser;
 import fr.paris.lutece.portal.service.util.AppPropertiesService;
+import jakarta.enterprise.inject.spi.CDI;
 
 public class WikiGrepTool extends AbstractWikiTool
 {
@@ -93,7 +94,7 @@ public class WikiGrepTool extends AbstractWikiTool
 
         try
         {
-            ElasticsearchClient client = ElasticsearchService.getInstance( ).getClient( );
+            ElasticsearchClient client = CDI.current( ).select( ElasticsearchService.class ).get( ).getClient( );
             String searchTerm = term.trim( );
 
             BoolQuery.Builder boolQuery = new BoolQuery.Builder( );

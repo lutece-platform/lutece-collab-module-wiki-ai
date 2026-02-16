@@ -38,37 +38,17 @@ import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.function.Consumer;
 
 import fr.paris.lutece.portal.service.util.AppLogService;
+import jakarta.enterprise.context.ApplicationScoped;
 
 /**
  * Service for managing Wiki AI events and subscriptions
  */
+@ApplicationScoped
 public class WikiEventService
 {
-    private static final String LOG_SUBSCRIBER_ERROR = "Error in event subscriber for streamId: ";
-
-    private static class SingletonHolder
-    {
-        static final WikiEventService INSTANCE = new WikiEventService( );
-    }
+    private static final String LOG_SUBSCRIBER_ERROR = "Error in event subscriber for streamId: {}";
 
     private final Set<Consumer<WikiEvent>> _subscribers = new CopyOnWriteArraySet<>( );
-
-    /**
-     * Private constructor for singleton
-     */
-    private WikiEventService( )
-    {
-    }
-
-    /**
-     * Gets the singleton instance
-     *
-     * @return the singleton instance
-     */
-    public static WikiEventService getInstance( )
-    {
-        return SingletonHolder.INSTANCE;
-    }
 
     /**
      * Subscribe to wiki events
@@ -99,7 +79,7 @@ public class WikiEventService
             }
             catch( Exception e )
             {
-                AppLogService.error( LOG_SUBSCRIBER_ERROR + event.getStreamId( ), e );
+                AppLogService.error( LOG_SUBSCRIBER_ERROR, event.getStreamId( ), e );
             }
         }
     }

@@ -45,12 +45,12 @@ import dev.langchain4j.rag.content.retriever.EmbeddingStoreContentRetriever;
 import dev.langchain4j.rag.query.Query;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import fr.paris.lutece.plugins.wiki.business.item.AbstractWikiItem;
-import fr.paris.lutece.plugins.wiki.modules.ai.service.model.ModelService;
-import fr.paris.lutece.plugins.wiki.service.WikiItemService;
 import fr.paris.lutece.plugins.wiki.modules.ai.service.rag.ElasticsearchService;
 import fr.paris.lutece.plugins.wiki.modules.ai.service.rag.components.WikiContentRetriever;
+import fr.paris.lutece.plugins.wiki.service.WikiItemService;
 import fr.paris.lutece.portal.service.security.LuteceUser;
 import fr.paris.lutece.portal.service.util.AppPropertiesService;
+import jakarta.enterprise.inject.spi.CDI;
 
 /**
  * Tool for semantic search across wiki documentation.
@@ -100,8 +100,8 @@ public class WikiSearchTool extends AbstractWikiTool
             return ERROR_QUERY_REQUIRED;
         }
 
-        EmbeddingModel embeddingModel = ModelService.getInstance( ).getEmbeddingModel( );
-        EmbeddingStore<TextSegment> embeddingStore = ElasticsearchService.getInstance( ).createEmbeddingStore( );
+        EmbeddingModel embeddingModel = CDI.current( ).select( EmbeddingModel.class, jakarta.enterprise.inject.literal.NamedLiteral.of( "wiki-ai.embeddingModel" ) ).get( );
+        EmbeddingStore<TextSegment> embeddingStore = CDI.current( ).select( ElasticsearchService.class ).get( ).createEmbeddingStore( );
 
         ContentRetriever baseRetriever = EmbeddingStoreContentRetriever.builder( ).embeddingStore( embeddingStore ).embeddingModel( embeddingModel )
                 .maxResults( MAX_RESULTS ).minScore( MIN_SCORE ).build( );

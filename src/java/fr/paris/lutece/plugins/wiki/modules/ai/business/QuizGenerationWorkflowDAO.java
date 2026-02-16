@@ -41,7 +41,9 @@ import java.util.Optional;
 
 import fr.paris.lutece.portal.service.plugin.Plugin;
 import fr.paris.lutece.util.sql.DAOUtil;
+import jakarta.enterprise.context.ApplicationScoped;
 
+@ApplicationScoped
 public class QuizGenerationWorkflowDAO implements IQuizGenerationWorkflowDAO
 {
     private static final String SQL_QUERY_INSERT = "INSERT INTO wiki_ai_quiz_generation_workflow (id_quiz, id_user, status, selected_page_ids, total_pages, processed_pages, date_creation, locale) VALUES (?, ?, ?, ?, ?, 0, ?, ?)";

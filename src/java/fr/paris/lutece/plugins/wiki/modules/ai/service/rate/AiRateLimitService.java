@@ -45,7 +45,9 @@ import fr.paris.lutece.plugins.wiki.modules.ai.business.AiUserRateLimit;
 import fr.paris.lutece.plugins.wiki.modules.ai.business.AiUserRateLimitHome;
 import fr.paris.lutece.portal.service.util.AppLogService;
 import fr.paris.lutece.portal.service.util.AppPropertiesService;
+import jakarta.enterprise.context.ApplicationScoped;
 
+@ApplicationScoped
 public class AiRateLimitService
 {
     private static final String PROPERTY_MESSAGES_PER_DAY = "wiki.ai.rateLimit.messagesPerDay";
@@ -61,28 +63,6 @@ public class AiRateLimitService
     private static final int INITIAL_MESSAGE_COUNT = 1;
 
     private static final int DAILY_LIMIT = AppPropertiesService.getPropertyInt( PROPERTY_MESSAGES_PER_DAY, DEFAULT_MESSAGES_PER_DAY );
-
-    private static class SingletonHolder
-    {
-        static final AiRateLimitService INSTANCE = new AiRateLimitService( );
-    }
-
-    /**
-     * Private constructor for singleton pattern
-     */
-    private AiRateLimitService( )
-    {
-    }
-
-    /**
-     * Gets the singleton instance of the AiRateLimitService
-     *
-     * @return The AiRateLimitService instance
-     */
-    public static AiRateLimitService getInstance( )
-    {
-        return SingletonHolder.INSTANCE;
-    }
 
     /**
      * Checks if a user has exceeded their rate limit

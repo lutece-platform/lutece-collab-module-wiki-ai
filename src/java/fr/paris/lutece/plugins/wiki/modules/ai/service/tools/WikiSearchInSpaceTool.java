@@ -47,12 +47,12 @@ import dev.langchain4j.store.embedding.EmbeddingStore;
 import dev.langchain4j.store.embedding.filter.Filter;
 import dev.langchain4j.store.embedding.filter.comparison.IsEqualTo;
 import fr.paris.lutece.plugins.wiki.business.item.AbstractWikiItem;
-import fr.paris.lutece.plugins.wiki.modules.ai.service.model.ModelService;
-import fr.paris.lutece.plugins.wiki.service.WikiItemService;
 import fr.paris.lutece.plugins.wiki.modules.ai.service.rag.ElasticsearchService;
 import fr.paris.lutece.plugins.wiki.modules.ai.service.rag.components.WikiContentRetriever;
+import fr.paris.lutece.plugins.wiki.service.WikiItemService;
 import fr.paris.lutece.portal.service.security.LuteceUser;
 import fr.paris.lutece.portal.service.util.AppPropertiesService;
+import jakarta.enterprise.inject.spi.CDI;
 
 /**
  * Tool for searching within a specific wiki space using semantic search.
@@ -116,8 +116,8 @@ public class WikiSearchInSpaceTool extends AbstractWikiTool
 
         clearSources( );
 
-        EmbeddingModel embeddingModel = ModelService.getInstance( ).getEmbeddingModel( );
-        EmbeddingStore<TextSegment> embeddingStore = ElasticsearchService.getInstance( ).createEmbeddingStore( );
+        EmbeddingModel embeddingModel = CDI.current( ).select( EmbeddingModel.class, jakarta.enterprise.inject.literal.NamedLiteral.of( "wiki-ai.embeddingModel" ) ).get( );
+        EmbeddingStore<TextSegment> embeddingStore = CDI.current( ).select( ElasticsearchService.class ).get( ).createEmbeddingStore( );
 
         Filter spaceFilter = new IsEqualTo( FILTER_KEY_SPACE_CODE, spaceCode.trim( ) );
 

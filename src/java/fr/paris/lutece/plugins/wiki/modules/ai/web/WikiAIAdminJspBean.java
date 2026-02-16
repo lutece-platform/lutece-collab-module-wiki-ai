@@ -37,14 +37,16 @@ import fr.paris.lutece.portal.util.mvc.admin.MVCAdminJspBean;
 import fr.paris.lutece.portal.util.mvc.admin.annotations.Controller;
 import fr.paris.lutece.portal.util.mvc.commons.annotations.View;
 
-import java.util.Map;
-
-import javax.servlet.http.HttpServletRequest;
+import jakarta.enterprise.context.RequestScoped;
+import jakarta.inject.Named;
+import jakarta.servlet.http.HttpServletRequest;
 
 /**
  * Wiki AI Administration JSP Bean for managing Elasticsearch indexation. Displays the indexation management page. All indexation operations are handled via
  * REST API.
  */
+@RequestScoped
+@Named
 @Controller( controllerJsp = "ManageIndexation.jsp", controllerPath = "jsp/admin/plugins/wiki/modules/ai/", right = "WIKI_AI_MANAGEMENT" )
 public class WikiAIAdminJspBean extends MVCAdminJspBean
 {
@@ -65,7 +67,6 @@ public class WikiAIAdminJspBean extends MVCAdminJspBean
     @View( value = VIEW_HOME, defaultView = true )
     public String getManageIndexation( HttpServletRequest request )
     {
-        Map<String, Object> model = getModel( );
-        return getPage( PROPERTY_PAGE_TITLE, TEMPLATE_MANAGE_INDEXATION, model );
+        return getPage( PROPERTY_PAGE_TITLE, TEMPLATE_MANAGE_INDEXATION );
     }
 }

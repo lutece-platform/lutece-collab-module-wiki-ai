@@ -38,42 +38,28 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.model.input.PromptTemplate;
 import fr.paris.lutece.plugins.wiki.modules.ai.business.AiFeature;
 import fr.paris.lutece.plugins.wiki.modules.ai.business.AiFeatureHome;
-import fr.paris.lutece.plugins.wiki.modules.ai.service.model.ModelService;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import jakarta.inject.Named;
 
 /**
  * Service for managing AI features.
  */
+@ApplicationScoped
 public class AiFeatureService
 {
     private static final String ERROR_FEATURE_NOT_FOUND = "Feature not found with id: ";
     private static final String ERROR_FEATURE_INACTIVE = "Feature is not active: ";
     private static final String VARIABLE_TEXT = "text";
 
-    private static class SingletonHolder
-    {
-        static final AiFeatureService INSTANCE = new AiFeatureService( );
-    }
-
-    /**
-     * Private constructor.
-     */
-    private AiFeatureService( )
-    {
-    }
-
-    /**
-     * Gets the singleton instance of AiFeatureService.
-     *
-     * @return the instance of AiFeatureService
-     */
-    public static AiFeatureService getInstance( )
-    {
-        return SingletonHolder.INSTANCE;
-    }
+    @Inject
+    @Named( "wiki-ai.streamingChatModel" )
+    private StreamingChatModel _streamingChatModel;
 
     /**
      * Retrieves all active features.
@@ -128,7 +114,7 @@ public class AiFeatureService
         }
 
         String prompt = buildPrompt( feature.getPromptTemplate( ), strText );
-        ModelService.getInstance( ).getStreamingChatModel( ).chat( prompt, handler );
+        _streamingChatModel.chat( prompt, handler );
     }
 
     /**

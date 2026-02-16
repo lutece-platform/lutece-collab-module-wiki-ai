@@ -39,7 +39,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import javax.servlet.http.HttpServletRequest;
+import jakarta.enterprise.context.SessionScoped;
+import jakarta.inject.Inject;
+import jakarta.inject.Named;
+import jakarta.servlet.http.HttpServletRequest;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -58,6 +61,7 @@ import fr.paris.lutece.plugins.wiki.modules.ai.service.quiz.QuizGenerationServic
 import fr.paris.lutece.plugins.wiki.modules.quiz.service.QuizService;
 import fr.paris.lutece.plugins.wiki.service.security.WikiAccessControlService;
 import fr.paris.lutece.plugins.wiki.web.AbstractWikiXPage;
+import fr.paris.lutece.portal.service.security.ISecurityTokenService;
 import fr.paris.lutece.portal.service.security.LuteceUser;
 import fr.paris.lutece.portal.service.security.SecurityService;
 import fr.paris.lutece.portal.service.security.SecurityTokenService;
@@ -65,8 +69,11 @@ import fr.paris.lutece.portal.service.security.UserNotSignedException;
 import fr.paris.lutece.portal.util.mvc.commons.annotations.Action;
 import fr.paris.lutece.portal.util.mvc.commons.annotations.View;
 import fr.paris.lutece.portal.util.mvc.xpage.annotations.Controller;
+import fr.paris.lutece.portal.web.cdi.mvc.Models;
 import fr.paris.lutece.portal.web.xpages.XPage;
 
+@SessionScoped
+@Named( "wiki-ai.xpage.wikiaiQuizGeneration" )
 @Controller( xpageName = "wikiaiQuizGeneration", pageTitleI18nKey = "module.wiki.ai.quizGeneration.pageTitle", pagePathI18nKey = "module.wiki.ai.quizGeneration.pageTitle" )
 public class QuizGenerationXPage extends AbstractWikiXPage
 {
@@ -97,6 +104,13 @@ public class QuizGenerationXPage extends AbstractWikiXPage
     private static final String MARK_WORKFLOW = "workflow";
     private static final String MARK_QUESTIONS = "questions";
 
+    @Inject
+    private Models _models;
+    @Inject
+    private ISecurityTokenService _securityTokenService;
+    @Inject
+    private QuizGenerationService _quizGenerationService;
+
     @View( value = VIEW_SELECT_PAGES, defaultView = true )
     public XPage viewSelectPages( HttpServletRequest request ) throws UserNotSignedException
     {
@@ -106,7 +120,7 @@ public class QuizGenerationXPage extends AbstractWikiXPage
         if ( strQuizId == null || strQuizId.isEmpty( ) )
         {
             addError( "module.wiki.ai.quizGeneration.error.quizRequired", getLocale( request ) );
-            return getXPage( TEMPLATE_SELECT_PAGES, getLocale( request ), getModel( ) );
+            return getXPage( TEMPLATE_SELECT_PAGES, getLocale( request ) );
         }
 
         int nQuizId = Integer.parseInt( strQuizId );
@@ -114,22 +128,21 @@ public class QuizGenerationXPage extends AbstractWikiXPage
         if ( quiz == null )
         {
             addError( "module.wiki.ai.quizGeneration.error.quizNotFound", getLocale( request ) );
-            return getXPage( TEMPLATE_SELECT_PAGES, getLocale( request ), getModel( ) );
+            return getXPage( TEMPLATE_SELECT_PAGES, getLocale( request ) );
         }
 
         Optional<AbstractWikiItem> optBook = WikiItemHome.findByPrimaryKey( quiz.getIdBook( ) );
         if ( optBook.isEmpty( ) || !WikiAccessControlService.canEdit( user, optBook.get( ) ) )
         {
             addError( "module.wiki.ai.quizGeneration.error.accessDenied", getLocale( request ) );
-            return getXPage( TEMPLATE_SELECT_PAGES, getLocale( request ), getModel( ) );
+            return getXPage( TEMPLATE_SELECT_PAGES, getLocale( request ) );
         }
 
-        Map<String, Object> model = getModel( );
-        model.put( MARK_QUIZ, quiz );
-        model.put( SecurityTokenService.MARK_TOKEN, SecurityTokenService.getInstance( ).getToken( request, ACTION_START_GENERATION ) );
-        populateBookSidebarModel( model, user, (Book) optBook.get( ) );
+        _models.put( MARK_QUIZ, quiz );
+        _models.put( SecurityTokenService.MARK_TOKEN, _securityTokenService.getToken( request, ACTION_START_GENERATION ) );
+        populateBookSidebarModel( _models, user, (Book) optBook.get( ) );
 
-        return getXPage( TEMPLATE_SELECT_PAGES, getLocale( request ), model );
+        return getXPage( TEMPLATE_SELECT_PAGES, getLocale( request ) );
     }
 
     @Action( ACTION_START_GENERATION )
@@ -197,7 +210,7 @@ public class QuizGenerationXPage extends AbstractWikiXPage
         if ( strQuizId == null || strQuizId.isEmpty( ) )
         {
             addError( "module.wiki.ai.quizGeneration.error.quizRequired", getLocale( request ) );
-            return getXPage( TEMPLATE_WORKFLOWS, getLocale( request ), getModel( ) );
+            return getXPage( TEMPLATE_WORKFLOWS, getLocale( request ) );
         }
 
         int nQuizId = Integer.parseInt( strQuizId );
@@ -215,13 +228,12 @@ public class QuizGenerationXPage extends AbstractWikiXPage
 
         List<QuizGenerationWorkflow> workflows = QuizGenerationWorkflowHome.getWorkflowsByQuiz( nQuizId );
 
-        Map<String, Object> model = getModel( );
-        model.put( MARK_QUIZ, quiz );
-        model.put( MARK_WORKFLOWS, workflows );
-        model.put( SecurityTokenService.MARK_TOKEN, SecurityTokenService.getInstance( ).getToken( request, ACTION_DELETE_WORKFLOW ) );
-        populateBookSidebarModel( model, user, (Book) optBook.get( ) );
+        _models.put( MARK_QUIZ, quiz );
+        _models.put( MARK_WORKFLOWS, workflows );
+        _models.put( SecurityTokenService.MARK_TOKEN, _securityTokenService.getToken( request, ACTION_DELETE_WORKFLOW ) );
+        populateBookSidebarModel( _models, user, (Book) optBook.get( ) );
 
-        return getXPage( TEMPLATE_WORKFLOWS, getLocale( request ), model );
+        return getXPage( TEMPLATE_WORKFLOWS, getLocale( request ) );
     }
 
     @View( VIEW_REVIEW_QUESTIONS )
@@ -286,15 +298,14 @@ public class QuizGenerationXPage extends AbstractWikiXPage
             sourceFilters.add( filter );
         }
 
-        Map<String, Object> model = getModel( );
-        model.put( MARK_QUIZ, quiz );
-        model.put( MARK_WORKFLOW, workflow );
-        model.put( MARK_QUESTIONS, questions );
-        model.put( "source_filters", sourceFilters );
-        model.put( SecurityTokenService.MARK_TOKEN, SecurityTokenService.getInstance( ).getToken( request, ACTION_IMPORT_QUESTION ) );
-        populateBookSidebarModel( model, user, (Book) optBook.get( ) );
+        _models.put( MARK_QUIZ, quiz );
+        _models.put( MARK_WORKFLOW, workflow );
+        _models.put( MARK_QUESTIONS, questions );
+        _models.put( "source_filters", sourceFilters );
+        _models.put( SecurityTokenService.MARK_TOKEN, _securityTokenService.getToken( request, ACTION_IMPORT_QUESTION ) );
+        populateBookSidebarModel( _models, user, (Book) optBook.get( ) );
 
-        return getXPage( TEMPLATE_REVIEW, getLocale( request ), model );
+        return getXPage( TEMPLATE_REVIEW, getLocale( request ) );
     }
 
     @Action( ACTION_IMPORT_QUESTION )
@@ -319,7 +330,7 @@ public class QuizGenerationXPage extends AbstractWikiXPage
             return redirectView( request, VIEW_WORKFLOWS );
         }
 
-        QuizGenerationService.getInstance( ).importQuestion( nQuestionId, optWorkflow.get( ).getIdQuiz( ) );
+        _quizGenerationService.importQuestion( nQuestionId, optWorkflow.get( ).getIdQuiz( ) );
         addInfo( "module.wiki.ai.quizGeneration.message.questionImported", getLocale( request ) );
 
         Map<String, String> params = new HashMap<>( );
@@ -348,7 +359,7 @@ public class QuizGenerationXPage extends AbstractWikiXPage
         List<QuizGeneratedQuestion> questions = QuizGeneratedQuestionHome.getPendingQuestionsByWorkflow( nWorkflowId );
         for ( QuizGeneratedQuestion question : questions )
         {
-            QuizGenerationService.getInstance( ).importQuestion( question.getId( ), optWorkflow.get( ).getIdQuiz( ) );
+            _quizGenerationService.importQuestion( question.getId( ), optWorkflow.get( ).getIdQuiz( ) );
         }
 
         addInfo( "module.wiki.ai.quizGeneration.message.allImported", getLocale( request ) );

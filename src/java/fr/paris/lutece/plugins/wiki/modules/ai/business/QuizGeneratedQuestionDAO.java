@@ -40,7 +40,9 @@ import java.util.Optional;
 
 import fr.paris.lutece.portal.service.plugin.Plugin;
 import fr.paris.lutece.util.sql.DAOUtil;
+import jakarta.enterprise.context.ApplicationScoped;
 
+@ApplicationScoped
 public class QuizGeneratedQuestionDAO implements IQuizGeneratedQuestionDAO
 {
     private static final String SQL_QUERY_INSERT = "INSERT INTO wiki_ai_quiz_generated_question (id_workflow, id_source_page, question_text, question_type, explanation) VALUES (?, ?, ?, ?, ?)";

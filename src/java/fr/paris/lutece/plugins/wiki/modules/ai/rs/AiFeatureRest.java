@@ -39,19 +39,21 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.ws.rs.Consumes;
-import javax.ws.rs.GET;
-import javax.ws.rs.POST;
-import javax.ws.rs.Path;
-import javax.ws.rs.PathParam;
-import javax.ws.rs.Produces;
-import javax.ws.rs.QueryParam;
-import javax.ws.rs.core.Context;
-import javax.ws.rs.core.MediaType;
-import javax.ws.rs.core.Response;
-import javax.ws.rs.sse.Sse;
-import javax.ws.rs.sse.SseEventSink;
+import jakarta.enterprise.context.RequestScoped;
+import jakarta.inject.Inject;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.POST;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
+import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.core.Context;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.sse.Sse;
+import jakarta.ws.rs.sse.SseEventSink;
 
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
@@ -72,17 +74,18 @@ import fr.paris.lutece.portal.service.util.AppLogService;
 /**
  * REST endpoint for AI feature operations including streaming responses.
  */
+@RequestScoped
 @Path( "wiki/ai/features" )
 public class AiFeatureRest extends AbstractRestEndpoint
 {
-    private static final String LOG_ERROR_AI_FEATURES = "Error in AI features REST API: ";
-    private static final String LOG_FEATURE_NOT_FOUND = "Feature not found: ";
-    private static final String LOG_AUTH_FAILED = "Authentication failed for AI feature: ";
-    private static final String LOG_SSE_ERROR = "Error setting up SSE stream for streamId: ";
+    private static final String LOG_ERROR_AI_FEATURES = "Error in AI features REST API";
+    private static final String LOG_FEATURE_NOT_FOUND = "Feature not found: {}";
+    private static final String LOG_AUTH_FAILED = "Authentication failed for AI feature: {}";
+    private static final String LOG_SSE_ERROR = "Error setting up SSE stream for streamId: {}";
     private static final String LOG_ERROR_SENDING_TOKEN = "Error sending token event";
     private static final String LOG_ERROR_SENDING_COMPLETED = "Error sending completed event";
-    private static final String LOG_ERROR_DURING_STREAMING = "Error during streaming: ";
-    private static final String LOG_ERROR_EXECUTING_STREAMING = "Error executing streaming feature: ";
+    private static final String LOG_ERROR_DURING_STREAMING = "Error during streaming: {}";
+    private static final String LOG_ERROR_EXECUTING_STREAMING = "Error executing streaming feature: {}";
 
     private static final String KEY_STATUS = "status";
     private static final String KEY_FEATURE_ID = "feature_id";
@@ -92,10 +95,14 @@ public class AiFeatureRest extends AbstractRestEndpoint
     @Context
     private HttpServletRequest _request;
 
-    private final AiFeatureService _featureService = AiFeatureService.getInstance( );
-    private final AiRateLimitService _rateLimitService = AiRateLimitService.getInstance( );
-    private final StreamingService _streamingService = StreamingService.getInstance( );
-    private final WikiEventService _eventService = WikiEventService.getInstance( );
+    @Inject
+    private AiFeatureService _featureService;
+    @Inject
+    private AiRateLimitService _rateLimitService;
+    @Inject
+    private StreamingService _streamingService;
+    @Inject
+    private WikiEventService _eventService;
 
     /**
      * Retrieves available AI features, optionally filtered by type.
@@ -229,7 +236,7 @@ public class AiFeatureRest extends AbstractRestEndpoint
         LuteceUser user = authenticateAndAuthorize( );
         if ( user == null )
         {
-            AppLogService.error( LOG_AUTH_FAILED + streamId );
+            AppLogService.error( LOG_AUTH_FAILED, streamId );
             closeEventSinkWithError( eventSink, sse, WikiAIRestConstants.ERROR_AUTHENTICATION_FAILED );
             return;
         }
@@ -240,7 +247,7 @@ public class AiFeatureRest extends AbstractRestEndpoint
         }
         catch( Exception e )
         {
-            AppLogService.error( LOG_SSE_ERROR + streamId, e );
+            AppLogService.error( LOG_SSE_ERROR, streamId, e );
             closeEventSinkWithError( eventSink, sse, WikiAIRestConstants.ERROR_STREAM_SETUP_FAILED );
         }
     }
@@ -302,19 +309,19 @@ public class AiFeatureRest extends AbstractRestEndpoint
                     @Override
                     public void onError( Throwable error )
                     {
-                        AppLogService.error( LOG_ERROR_DURING_STREAMING + error.getMessage( ), error );
+                        AppLogService.error( LOG_ERROR_DURING_STREAMING, error.getMessage( ), error );
                         sendErrorEvent( streamId, error.getMessage( ) );
                     }
                 } );
             }
             catch( IllegalArgumentException e )
             {
-                AppLogService.error( LOG_FEATURE_NOT_FOUND + nFeatureId, e );
+                AppLogService.error( LOG_FEATURE_NOT_FOUND, nFeatureId, e );
                 sendErrorEvent( streamId, WikiAIRestConstants.ERROR_FEATURE_NOT_FOUND );
             }
             catch( Exception e )
             {
-                AppLogService.error( LOG_ERROR_EXECUTING_STREAMING + e.getMessage( ), e );
+                AppLogService.error( LOG_ERROR_EXECUTING_STREAMING, e.getMessage( ), e );
                 sendErrorEvent( streamId, e.getMessage( ) );
             }
         } );

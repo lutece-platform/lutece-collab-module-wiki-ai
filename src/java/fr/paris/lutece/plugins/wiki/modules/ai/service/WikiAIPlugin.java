@@ -33,7 +33,6 @@
  */
 package fr.paris.lutece.plugins.wiki.modules.ai.service;
 
-import fr.paris.lutece.plugins.wiki.modules.ai.service.event.WikiAIEventListener;
 import fr.paris.lutece.portal.service.plugin.Plugin;
 import fr.paris.lutece.portal.service.plugin.PluginDefaultImplementation;
 import fr.paris.lutece.portal.service.plugin.PluginService;
@@ -44,15 +43,6 @@ public final class WikiAIPlugin extends PluginDefaultImplementation implements S
 {
     public static final String PLUGIN_NAME = "wiki-ai";
     private static final long serialVersionUID = 1L;
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void init( )
-    {
-        WikiAIEventListener.getInstance( ).register( );
-    }
 
     /**
      * Returns the plugin

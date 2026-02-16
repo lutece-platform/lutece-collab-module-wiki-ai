@@ -39,11 +39,11 @@ import java.util.Optional;
 import fr.paris.lutece.plugins.wiki.modules.ai.service.WikiAIPlugin;
 import fr.paris.lutece.portal.service.plugin.Plugin;
 import fr.paris.lutece.portal.service.plugin.PluginService;
-import fr.paris.lutece.portal.service.spring.SpringContextService;
+import jakarta.enterprise.inject.spi.CDI;
 
 public final class QuizGeneratedQuestionHome
 {
-    private static final IQuizGeneratedQuestionDAO _dao = SpringContextService.getBean( "wiki-ai.quizGeneratedQuestionDAO" );
+    private static final IQuizGeneratedQuestionDAO _dao = CDI.current( ).select( IQuizGeneratedQuestionDAO.class ).get( );
     private static Plugin _plugin;
 
     private QuizGeneratedQuestionHome( )

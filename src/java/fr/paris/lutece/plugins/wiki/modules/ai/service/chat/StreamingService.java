@@ -41,10 +41,13 @@ import fr.paris.lutece.portal.service.init.ShutdownService;
 import fr.paris.lutece.portal.service.util.AppLogService;
 import fr.paris.lutece.portal.service.util.AppPropertiesService;
 
-import javax.ws.rs.core.MediaType;
-import javax.ws.rs.sse.OutboundSseEvent;
-import javax.ws.rs.sse.Sse;
-import javax.ws.rs.sse.SseEventSink;
+import jakarta.annotation.PostConstruct;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.sse.OutboundSseEvent;
+import jakarta.ws.rs.sse.Sse;
+import jakarta.ws.rs.sse.SseEventSink;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -55,6 +58,7 @@ import java.util.function.Consumer;
 /**
  * Manager for Wiki AI SSE streams
  */
+@ApplicationScoped
 public class StreamingService implements ShutdownService
 {
     private static final int CLEANUP_INITIAL_DELAY_SECONDS = 60;
@@ -65,7 +69,7 @@ public class StreamingService implements ShutdownService
     private static final int DEFAULT_STREAM_EXPIRY_SECONDS = 300;
     private static final String PROPERTY_MAX_CONCURRENT_STREAMS = "wiki.ai.sse.max.concurrent.streams";
     private static final String PROPERTY_STREAM_EXPIRY_SECONDS = "wiki.ai.sse.stream.expiry.seconds";
-    private static final String LOG_INITIALIZED = "StreamingService initialized with max concurrent streams: ";
+    private static final String LOG_INITIALIZED = "StreamingService initialized with max concurrent streams: {}";
     private static final String LOG_SHUTTING_DOWN = "StreamingService shutting down...";
     private static final String LOG_SHUTDOWN_COMPLETE = "StreamingService shutdown complete.";
     private static final String ERROR_REGISTER_SSE_STREAM = "Error registering SSE stream for streamId: %s";
@@ -78,38 +82,25 @@ public class StreamingService implements ShutdownService
     private static final int MAX_CONCURRENT_STREAMS = AppPropertiesService.getPropertyInt( PROPERTY_MAX_CONCURRENT_STREAMS, DEFAULT_MAX_CONCURRENT_STREAMS );
     private static final int STREAM_EXPIRY_SECONDS = AppPropertiesService.getPropertyInt( PROPERTY_STREAM_EXPIRY_SECONDS, DEFAULT_STREAM_EXPIRY_SECONDS );
 
-    private static class SingletonHolder
-    {
-        static final StreamingService INSTANCE = new StreamingService( );
-    }
-
     private final Map<String, StreamSubscription> _activeStreams = new ConcurrentHashMap<>( );
     private final ScheduledExecutorService _cleanupService = Executors.newSingleThreadScheduledExecutor( r -> {
         Thread t = new Thread( r, THREAD_NAME );
         t.setDaemon( true );
         return t;
     } );
-    private final WikiEventService _eventService;
     private final ObjectMapper _objectMapper = new ObjectMapper( );
 
-    /**
-     * Private constructor for singleton
-     */
-    private StreamingService( )
-    {
-        _eventService = WikiEventService.getInstance( );
-        scheduleCleanupTask( );
-        AppLogService.info( LOG_INITIALIZED + MAX_CONCURRENT_STREAMS );
-    }
+    @Inject
+    private WikiEventService _eventService;
 
     /**
-     * Gets the singleton instance
-     *
-     * @return the singleton instance
+     * Initializes the streaming service after CDI construction.
      */
-    public static StreamingService getInstance( )
+    @PostConstruct
+    public void init( )
     {
-        return SingletonHolder.INSTANCE;
+        scheduleCleanupTask( );
+        AppLogService.info( LOG_INITIALIZED, MAX_CONCURRENT_STREAMS );
     }
 
     /**

@@ -36,14 +36,14 @@ package fr.paris.lutece.plugins.wiki.modules.ai.business;
 import java.util.List;
 
 import fr.paris.lutece.portal.service.plugin.Plugin;
-import fr.paris.lutece.portal.service.spring.SpringContextService;
+import jakarta.enterprise.inject.spi.CDI;
 
 /**
  * WikiAIIndexerActionHome provides management methods for WikiAIIndexerAction objects
  */
 public final class WikiAIIndexerActionHome
 {
-    private static IWikiAIIndexerActionDAO _dao = SpringContextService.getBean( "wiki-ai.wikiAIIndexerActionDAO" );
+    private static IWikiAIIndexerActionDAO _dao = CDI.current( ).select( IWikiAIIndexerActionDAO.class ).get( );
 
     /**
      * Private constructor

@@ -45,62 +45,27 @@ import fr.paris.lutece.plugins.wiki.modules.ai.business.WikiAIIndexerAction;
 import fr.paris.lutece.plugins.wiki.modules.ai.business.WikiAIIndexerActionHome;
 import fr.paris.lutece.plugins.wiki.modules.ai.service.WikiAIPlugin;
 import fr.paris.lutece.plugins.wiki.service.WikiItemService;
-import fr.paris.lutece.portal.business.event.EventRessourceListener;
 import fr.paris.lutece.portal.business.event.ResourceEvent;
-import fr.paris.lutece.portal.service.event.ResourceEventManager;
-import fr.paris.lutece.portal.service.util.AppLogService;
+import fr.paris.lutece.portal.service.event.EventAction;
+import fr.paris.lutece.portal.service.event.Type;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Observes;
 
 /**
  * Event listener for Wiki AI module that handles indexing operations when wiki resources are created, updated or deleted.
  */
-public class WikiAIEventListener implements EventRessourceListener
+@ApplicationScoped
+public class WikiAIEventListener
 {
-    private static final String LISTENER_NAME = "wikiAIEventListener";
-    private static final String LOG_REGISTERED = "WikiAIEventListener registered successfully";
     private static final String DOCUMENT_ID_SEPARATOR = "_";
 
-    private static class SingletonHolder
-    {
-        static final WikiAIEventListener INSTANCE = new WikiAIEventListener( );
-    }
-
-    private WikiAIEventListener( )
-    {
-    }
-
     /**
-     * Gets the singleton instance of WikiAIEventListener.
+     * Handles resource creation events
      *
-     * @return the WikiAIEventListener instance
+     * @param event
+     *            the resource event
      */
-    public static WikiAIEventListener getInstance( )
-    {
-        return SingletonHolder.INSTANCE;
-    }
-
-    /**
-     * Registers the listener with the ResourceEventManager.
-     */
-    public void register( )
-    {
-        ResourceEventManager.register( this );
-        AppLogService.info( LOG_REGISTERED );
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public String getName( )
-    {
-        return LISTENER_NAME;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void addedResource( ResourceEvent event )
+    public void addedResource( @Observes @Type( EventAction.CREATE ) ResourceEvent event )
     {
         String strResourceType = event.getTypeResource( );
         if ( Revision.RESOURCE_TYPE.equals( strResourceType ) )
@@ -110,18 +75,12 @@ public class WikiAIEventListener implements EventRessourceListener
     }
 
     /**
-     * {@inheritDoc}
+     * Handles resource deletion events
+     *
+     * @param event
+     *            the resource event
      */
-    @Override
-    public void updatedResource( ResourceEvent event )
-    {
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void deletedResource( ResourceEvent event )
+    public void deletedResource( @Observes @Type( EventAction.REMOVE ) ResourceEvent event )
     {
         removeFromIndex( event );
     }

@@ -34,10 +34,12 @@
 package fr.paris.lutece.plugins.wiki.modules.ai.web;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
-import javax.servlet.http.HttpServletRequest;
+import jakarta.enterprise.context.SessionScoped;
+import jakarta.inject.Inject;
+import jakarta.inject.Named;
+import jakarta.servlet.http.HttpServletRequest;
 
 import fr.paris.lutece.plugins.wiki.modules.ai.business.AiFeature;
 import fr.paris.lutece.plugins.wiki.modules.ai.business.AiFeatureHome;
@@ -47,8 +49,11 @@ import fr.paris.lutece.portal.util.mvc.admin.MVCAdminJspBean;
 import fr.paris.lutece.portal.util.mvc.admin.annotations.Controller;
 import fr.paris.lutece.portal.util.mvc.commons.annotations.Action;
 import fr.paris.lutece.portal.util.mvc.commons.annotations.View;
+import fr.paris.lutece.portal.web.cdi.mvc.Models;
 import fr.paris.lutece.util.url.UrlItem;
 
+@SessionScoped
+@Named
 @Controller( controllerJsp = "ManageAiFeatures.jsp", controllerPath = "jsp/admin/plugins/wiki/modules/ai/", right = "WIKI_AI_FEATURES" )
 public class ManageAiFeaturesJspBean extends MVCAdminJspBean
 {
@@ -76,6 +81,9 @@ public class ManageAiFeaturesJspBean extends MVCAdminJspBean
     private static final String INFO_FEATURE_REMOVED = "module.wiki.ai.info.feature.removed";
     private static final String MESSAGE_CONFIRM_REMOVE_FEATURE = "module.wiki.ai.message.confirmRemoveFeature";
 
+    @Inject
+    private Models _models;
+
     private AiFeature _feature;
 
     /**
@@ -89,10 +97,9 @@ public class ManageAiFeaturesJspBean extends MVCAdminJspBean
     public String getManageFeatures( HttpServletRequest request )
     {
         _feature = null;
-        Map<String, Object> model = getModel( );
         List<AiFeature> listFeatures = AiFeatureHome.getAiFeaturesList( );
-        model.put( MARK_FEATURE_LIST, listFeatures );
-        return getPage( PROPERTY_PAGE_TITLE_MANAGE, TEMPLATE_MANAGE_FEATURES, model );
+        _models.put( MARK_FEATURE_LIST, listFeatures );
+        return getPage( PROPERTY_PAGE_TITLE_MANAGE, TEMPLATE_MANAGE_FEATURES );
     }
 
     /**
@@ -108,10 +115,9 @@ public class ManageAiFeaturesJspBean extends MVCAdminJspBean
         _feature = new AiFeature( );
         List<AiFeature> listFeatures = AiFeatureHome.getAiFeaturesList( );
         _feature.setOrder( listFeatures.size( ) + 1 );
-        Map<String, Object> model = getModel( );
-        model.put( MARK_FEATURE, _feature );
-        model.put( MARK_FEATURE_LIST, listFeatures );
-        return getPage( PROPERTY_PAGE_TITLE_CREATE, TEMPLATE_CREATE_FEATURE, model );
+        _models.put( MARK_FEATURE, _feature );
+        _models.put( MARK_FEATURE_LIST, listFeatures );
+        return getPage( PROPERTY_PAGE_TITLE_CREATE, TEMPLATE_CREATE_FEATURE );
     }
 
     /**
@@ -151,10 +157,9 @@ public class ManageAiFeaturesJspBean extends MVCAdminJspBean
             _feature = optFeature.orElse( null );
         }
         List<AiFeature> listFeatures = AiFeatureHome.getAiFeaturesList( );
-        Map<String, Object> model = getModel( );
-        model.put( MARK_FEATURE, _feature );
-        model.put( MARK_FEATURE_LIST, listFeatures );
-        return getPage( PROPERTY_PAGE_TITLE_MODIFY, TEMPLATE_MODIFY_FEATURE, model );
+        _models.put( MARK_FEATURE, _feature );
+        _models.put( MARK_FEATURE_LIST, listFeatures );
+        return getPage( PROPERTY_PAGE_TITLE_MODIFY, TEMPLATE_MODIFY_FEATURE );
     }
 
     /**
@@ -184,7 +189,7 @@ public class ManageAiFeaturesJspBean extends MVCAdminJspBean
      *            the HTTP request
      * @return the confirmation redirect URL
      */
-    @Action( ACTION_CONFIRM_REMOVE_FEATURE )
+    @Action( value = ACTION_CONFIRM_REMOVE_FEATURE, securityTokenAction = ACTION_REMOVE_FEATURE )
     public String getConfirmRemoveFeature( HttpServletRequest request )
     {
         int nId = Integer.parseInt( request.getParameter( PARAMETER_ID_FEATURE ) );

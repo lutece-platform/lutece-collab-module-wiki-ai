@@ -38,18 +38,20 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.ws.rs.Consumes;
-import javax.ws.rs.GET;
-import javax.ws.rs.POST;
-import javax.ws.rs.Path;
-import javax.ws.rs.PathParam;
-import javax.ws.rs.Produces;
-import javax.ws.rs.core.Context;
-import javax.ws.rs.core.MediaType;
-import javax.ws.rs.core.Response;
-import javax.ws.rs.sse.Sse;
-import javax.ws.rs.sse.SseEventSink;
+import jakarta.enterprise.context.RequestScoped;
+import jakarta.inject.Inject;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.POST;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
+import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.Context;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.sse.Sse;
+import jakarta.ws.rs.sse.SseEventSink;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -72,19 +74,20 @@ import fr.paris.lutece.portal.service.util.AppLogService;
 /**
  * REST endpoint for Wiki AI chat operations with streaming support.
  */
+@RequestScoped
 @Path( "wiki/ai" )
 public class WikiAIChatRest extends AbstractRestEndpoint
 {
-    private static final String LOG_AUTH_FAILED = "Authentication failed for wiki AI chat: ";
-    private static final String LOG_SSE_ERROR = "Error setting up SSE stream for streamId: ";
+    private static final String LOG_AUTH_FAILED = "Authentication failed for wiki AI chat: {}";
+    private static final String LOG_SSE_ERROR = "Error setting up SSE stream for streamId: {}";
     private static final String LOG_NO_AUTH_USER_NEW_CONVERSATION = "No authenticated user for new conversation";
     private static final String LOG_NO_AUTH_USER = "No authenticated user";
     private static final String LOG_ERROR_SENDING_TOKEN = "Error sending token event";
     private static final String LOG_ERROR_SENDING_COMPLETED = "Error sending completed event";
     private static final String LOG_ERROR_SENDING_TOOL_EVENT = "Error sending tool event";
-    private static final String LOG_ERROR_DURING_STREAMING = "Error during streaming: ";
-    private static final String LOG_ERROR_EXECUTING_STREAMING = "Error executing streaming chat: ";
-    private static final String LOG_DEBUG_PARSE_TOOL_ARGS = "Failed to parse tool arguments: ";
+    private static final String LOG_ERROR_DURING_STREAMING = "Error during streaming: {}";
+    private static final String LOG_ERROR_EXECUTING_STREAMING = "Error executing streaming chat: {}";
+    private static final String LOG_DEBUG_PARSE_TOOL_ARGS = "Failed to parse tool arguments: {}";
 
     private static final String KEY_STATUS = "status";
     private static final String KEY_TOOL_NAME = "tool_name";
@@ -132,12 +135,16 @@ public class WikiAIChatRest extends AbstractRestEndpoint
     @Context
     private HttpServletRequest _request;
 
-    private final MemoryService _memoryService = MemoryService.getInstance( );
-    private final RAGService _ragService = RAGService.getInstance( );
-    private final AiRateLimitService _rateLimitService = AiRateLimitService.getInstance( );
-    private final StreamingService _sseStreamManager = StreamingService.getInstance( );
-    private final WikiEventService _eventService = WikiEventService.getInstance( );
-
+    @Inject
+    private MemoryService _memoryService;
+    @Inject
+    private RAGService _ragService;
+    @Inject
+    private AiRateLimitService _rateLimitService;
+    @Inject
+    private StreamingService _sseStreamManager;
+    @Inject
+    private WikiEventService _eventService;
     /**
      * Creates a new conversation for the authenticated user.
      *
@@ -151,7 +158,7 @@ public class WikiAIChatRest extends AbstractRestEndpoint
         LuteceUser user = SecurityService.getInstance( ).getRegisteredUser( _request );
         if ( user == null )
         {
-            AppLogService.error( LOG_AUTH_FAILED + LOG_NO_AUTH_USER_NEW_CONVERSATION );
+            AppLogService.error( LOG_AUTH_FAILED, LOG_NO_AUTH_USER_NEW_CONVERSATION );
             return createErrorResponse( Response.Status.UNAUTHORIZED, WikiAIRestConstants.ERROR_AUTHENTICATION_FAILED );
         }
 
@@ -182,7 +189,7 @@ public class WikiAIChatRest extends AbstractRestEndpoint
         LuteceUser user = SecurityService.getInstance( ).getRegisteredUser( _request );
         if ( user == null )
         {
-            AppLogService.error( LOG_AUTH_FAILED + LOG_NO_AUTH_USER );
+            AppLogService.error( LOG_AUTH_FAILED, LOG_NO_AUTH_USER );
             return createErrorResponse( Response.Status.UNAUTHORIZED, WikiAIRestConstants.ERROR_AUTHENTICATION_FAILED );
         }
 
@@ -240,7 +247,7 @@ public class WikiAIChatRest extends AbstractRestEndpoint
         LuteceUser user = SecurityService.getInstance( ).getRegisteredUser( _request );
         if ( user == null )
         {
-            AppLogService.error( LOG_AUTH_FAILED + streamId );
+            AppLogService.error( LOG_AUTH_FAILED, streamId );
             closeEventSinkWithError( eventSink, sse, WikiAIRestConstants.ERROR_AUTHENTICATION_FAILED );
             return;
         }
@@ -251,7 +258,7 @@ public class WikiAIChatRest extends AbstractRestEndpoint
         }
         catch( Exception e )
         {
-            AppLogService.error( LOG_SSE_ERROR + streamId, e );
+            AppLogService.error( LOG_SSE_ERROR, streamId, e );
             closeEventSinkWithError( eventSink, sse, WikiAIRestConstants.ERROR_STREAM_SETUP_FAILED );
         }
     }
@@ -295,13 +302,13 @@ public class WikiAIChatRest extends AbstractRestEndpoint
                 } ).onCompleteResponse( response -> {
                     handleCompleteResponse( streamId );
                 } ).onError( error -> {
-                    AppLogService.error( LOG_ERROR_DURING_STREAMING + error.getMessage( ), error );
+                    AppLogService.error( LOG_ERROR_DURING_STREAMING, error.getMessage( ), error );
                     sendErrorEvent( streamId, error.getMessage( ) );
                 } ).start( );
             }
             catch( Exception e )
             {
-                AppLogService.error( LOG_ERROR_EXECUTING_STREAMING + e.getMessage( ), e );
+                AppLogService.error( LOG_ERROR_EXECUTING_STREAMING, e.getMessage( ), e );
                 sendErrorEvent( streamId, e.getMessage( ) );
             }
         } );
@@ -498,7 +505,7 @@ public class WikiAIChatRest extends AbstractRestEndpoint
         }
         catch( Exception e )
         {
-            AppLogService.debug( LOG_DEBUG_PARSE_TOOL_ARGS + e.getMessage( ) );
+            AppLogService.debug( LOG_DEBUG_PARSE_TOOL_ARGS, e.getMessage( ) );
         }
         return "";
     }

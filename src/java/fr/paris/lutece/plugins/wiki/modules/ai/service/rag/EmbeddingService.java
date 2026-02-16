@@ -61,12 +61,15 @@ import fr.paris.lutece.plugins.wiki.business.item.impl.Page;
 import fr.paris.lutece.plugins.wiki.business.item.impl.Space;
 import fr.paris.lutece.plugins.wiki.business.revision.Revision;
 import fr.paris.lutece.plugins.wiki.business.revision.RevisionHome;
-import fr.paris.lutece.plugins.wiki.modules.ai.service.model.ModelService;
 import fr.paris.lutece.plugins.wiki.modules.ai.service.rag.util.IndexingStatus;
 import fr.paris.lutece.plugins.wiki.service.WikiItemService;
 import fr.paris.lutece.plugins.wiki.service.WikiUrlService;
 import fr.paris.lutece.portal.service.util.AppLogService;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import jakarta.inject.Named;
 
+@ApplicationScoped
 public class EmbeddingService
 {
     private static final int CHUNK_SIZE = 1000;
@@ -90,12 +93,12 @@ public class EmbeddingService
     private static final String FIELD_DATE_MODIFIED = "date_modified";
     private static final String FIELD_CHUNK_INDEX = "chunk_index";
 
-    private static final String LOG_INDEXED_BOOK = "Indexed book ";
-    private static final String LOG_INDEXED_SPACE = "Indexed space ";
+    private static final String LOG_INDEXED_BOOK = "Indexed book {} {} items";
+    private static final String LOG_INDEXED_SPACE = "Indexed space {} ({} chunks)";
     private static final String LOG_REINDEX_COMPLETED = "Reindexing completed successfully";
-    private static final String LOG_REMOVED_BOOK = "Removed book ";
-    private static final String LOG_REMOVED_PAGE = "Removed page ";
-    private static final String LOG_REMOVED_SPACE = "Removed space ";
+    private static final String LOG_REMOVED_BOOK = "Removed book {} {} items";
+    private static final String LOG_REMOVED_PAGE = "Removed page {} {} items";
+    private static final String LOG_REMOVED_SPACE = "Removed space {} {} items";
     private static final String LOG_INDEX_CLEARED = "Elasticsearch index cleared successfully";
     private static final String LOG_CLEARING_INDEX = "Clearing Elasticsearch index...";
     private static final String LOG_INDEX_CLEARED_SUCCESS = "Index cleared successfully";
@@ -107,11 +110,11 @@ public class EmbeddingService
     private static final String LOG_INDEXING_BOOK = "Indexing book: ";
     private static final String LOG_FULL_INDEXATION_COMPLETED = "Full indexation completed successfully";
 
-    private static final String ERROR_INDEXING_BOOK = "Error indexing book ";
-    private static final String ERROR_INDEXING_SPACE = "Error indexing space ";
-    private static final String ERROR_REMOVING_BOOK = "Error removing book ";
-    private static final String ERROR_REMOVING_PAGE = "Error removing page ";
-    private static final String ERROR_REMOVING_SPACE = "Error removing space ";
+    private static final String ERROR_INDEXING_BOOK = "Error indexing book {}";
+    private static final String ERROR_INDEXING_SPACE = "Error indexing space {}";
+    private static final String ERROR_REMOVING_BOOK = "Error removing book {}";
+    private static final String ERROR_REMOVING_PAGE = "Error removing page {}";
+    private static final String ERROR_REMOVING_SPACE = "Error removing space {}";
     private static final String ERROR_CLEARING_INDEX = "Error clearing Elasticsearch index";
     private static final String ERROR_DURING_REINDEXING = "Error during reindexing";
     private static final String ERROR_CLEARING_INDEX_MSG = "Error clearing index: ";
@@ -129,29 +132,14 @@ public class EmbeddingService
     private static final String EMPTY_STRING = "";
     private static final String REGEX_WHITESPACE = "\\s+";
 
-    private static class SingletonHolder
-    {
-        static final EmbeddingService INSTANCE = new EmbeddingService( );
-    }
+    @Inject
+    @Named( "wiki-ai.embeddingModel" )
+    private EmbeddingModel _embeddingModel;
+
+    @Inject
+    private ElasticsearchService _elasticsearchService;
 
     private final IndexingStatus _indexingStatus = new IndexingStatus( );
-
-    /**
-     * Private constructor for singleton pattern
-     */
-    private EmbeddingService( )
-    {
-    }
-
-    /**
-     * Gets the singleton instance of the EmbeddingService
-     *
-     * @return The EmbeddingService instance
-     */
-    public static EmbeddingService getInstance( )
-    {
-        return SingletonHolder.INSTANCE;
-    }
 
     /**
      * Gets the current indexing status
@@ -221,11 +209,11 @@ public class EmbeddingService
                 }
             }
 
-            AppLogService.info( LOG_INDEXED_BOOK + book.getCode( ) + SPACE + totalItems + " items" );
+            AppLogService.info( LOG_INDEXED_BOOK, book.getCode( ), totalItems );
         }
         catch( Exception e )
         {
-            AppLogService.error( ERROR_INDEXING_BOOK + book.getId( ), e );
+            AppLogService.error( ERROR_INDEXING_BOOK, book.getId( ), e );
         }
     }
 
@@ -274,8 +262,7 @@ public class EmbeddingService
                 return;
             }
 
-            EmbeddingModel embeddingModel = ModelService.getInstance( ).getEmbeddingModel( );
-            EmbeddingStore<TextSegment> embeddingStore = ElasticsearchService.getInstance( ).createEmbeddingStore( );
+            EmbeddingStore<TextSegment> embeddingStore = _elasticsearchService.createEmbeddingStore( );
 
             String cleanedDescription = cleanMarkdownContent( revision.getDescription( ) );
             String cleanedContent = cleanMarkdownContent( revision.getContent( ) );
@@ -335,16 +322,16 @@ public class EmbeddingService
 
             if ( !segmentsWithMetadata.isEmpty( ) )
             {
-                Response<List<Embedding>> embeddingsResponse = embeddingModel.embedAll( segmentsWithMetadata );
+                Response<List<Embedding>> embeddingsResponse = _embeddingModel.embedAll( segmentsWithMetadata );
                 List<Embedding> embeddings = embeddingsResponse.content( );
                 embeddingStore.addAll( ids, embeddings, segmentsWithMetadata );
 
-                AppLogService.info( "Indexed book " + book.getCode( ) + " (" + segments.size( ) + " chunks)" );
+                AppLogService.info( "Indexed book {} ({} chunks)", book.getCode( ), segments.size( ) );
             }
         }
         catch( Exception e )
         {
-            AppLogService.error( "Error indexing book " + book.getId( ), e );
+            AppLogService.error( "Error indexing book {}", book.getId( ), e );
         }
     }
 
@@ -358,8 +345,7 @@ public class EmbeddingService
                 return;
             }
 
-            EmbeddingModel embeddingModel = ModelService.getInstance( ).getEmbeddingModel( );
-            EmbeddingStore<TextSegment> embeddingStore = ElasticsearchService.getInstance( ).createEmbeddingStore( );
+            EmbeddingStore<TextSegment> embeddingStore = _elasticsearchService.createEmbeddingStore( );
 
             String cleanedDescription = cleanMarkdownContent( revision.getDescription( ) );
             String cleanedContent = cleanMarkdownContent( revision.getContent( ) );
@@ -407,16 +393,16 @@ public class EmbeddingService
 
             if ( !segmentsWithMetadata.isEmpty( ) )
             {
-                Response<List<Embedding>> embeddingsResponse = embeddingModel.embedAll( segmentsWithMetadata );
+                Response<List<Embedding>> embeddingsResponse = _embeddingModel.embedAll( segmentsWithMetadata );
                 List<Embedding> embeddings = embeddingsResponse.content( );
                 embeddingStore.addAll( ids, embeddings, segmentsWithMetadata );
 
-                AppLogService.info( LOG_INDEXED_SPACE + space.getCode( ) + " (" + segments.size( ) + " chunks)" );
+                AppLogService.info( LOG_INDEXED_SPACE, space.getCode( ), segments.size( ) );
             }
         }
         catch( Exception e )
         {
-            AppLogService.error( ERROR_INDEXING_SPACE + space.getId( ), e );
+            AppLogService.error( ERROR_INDEXING_SPACE, space.getId( ), e );
         }
     }
 
@@ -436,8 +422,7 @@ public class EmbeddingService
                 return;
             }
 
-            EmbeddingModel embeddingModel = ModelService.getInstance( ).getEmbeddingModel( );
-            EmbeddingStore<TextSegment> embeddingStore = ElasticsearchService.getInstance( ).createEmbeddingStore( );
+            EmbeddingStore<TextSegment> embeddingStore = _elasticsearchService.createEmbeddingStore( );
 
             String cleanedDescription = cleanMarkdownContent( revision.getDescription( ) );
             String cleanedContent = cleanMarkdownContent( revision.getContent( ) );
@@ -485,16 +470,16 @@ public class EmbeddingService
 
             if ( !segmentsWithMetadata.isEmpty( ) )
             {
-                Response<List<Embedding>> embeddingsResponse = embeddingModel.embedAll( segmentsWithMetadata );
+                Response<List<Embedding>> embeddingsResponse = _embeddingModel.embedAll( segmentsWithMetadata );
                 List<Embedding> embeddings = embeddingsResponse.content( );
                 embeddingStore.addAll( ids, embeddings, segmentsWithMetadata );
 
-                AppLogService.info( "Indexed page " + page.getCode( ) + " (" + segments.size( ) + " chunks)" );
+                AppLogService.info( "Indexed page {} ({} chunks)", page.getCode( ), segments.size( ) );
             }
         }
         catch( Exception e )
         {
-            AppLogService.error( "Error indexing page " + page.getId( ), e );
+            AppLogService.error( "Error indexing page {}", page.getId( ), e );
         }
     }
 
@@ -571,18 +556,17 @@ public class EmbeddingService
     {
         try
         {
-            ElasticsearchService esService = ElasticsearchService.getInstance( );
-            String indexName = esService.getIndexName( );
+            String indexName = _elasticsearchService.getIndexName( );
 
-            DeleteByQueryResponse response = esService.getClient( ).deleteByQuery(
+            DeleteByQueryResponse response = _elasticsearchService.getClient( ).deleteByQuery(
                     delete -> delete.index( indexName ).query( q -> q.term( t -> t.field( "metadata.book_id.keyword" ).value( String.valueOf( bookId ) ) ) ) );
 
             long deletedCount = response.deleted( );
-            AppLogService.info( LOG_REMOVED_BOOK + bookId + SPACE + deletedCount + " items" );
+            AppLogService.info( LOG_REMOVED_BOOK, bookId, deletedCount );
         }
         catch( ElasticsearchException | IOException e )
         {
-            AppLogService.error( ERROR_REMOVING_BOOK + bookId, e );
+            AppLogService.error( ERROR_REMOVING_BOOK, bookId, e );
         }
     }
 
@@ -596,17 +580,16 @@ public class EmbeddingService
     {
         try
         {
-            ElasticsearchService esService = ElasticsearchService.getInstance( );
-            String indexName = esService.getIndexName( );
+            String indexName = _elasticsearchService.getIndexName( );
 
-            DeleteByQueryResponse response = esService.getClient( ).deleteByQuery(
+            DeleteByQueryResponse response = _elasticsearchService.getClient( ).deleteByQuery(
                     delete -> delete.index( indexName ).query( q -> q.term( t -> t.field( "metadata.page_id.keyword" ).value( String.valueOf( pageId ) ) ) ) );
 
-            AppLogService.info( LOG_REMOVED_PAGE + pageId + SPACE + response.deleted( ) + " items" );
+            AppLogService.info( LOG_REMOVED_PAGE, pageId, response.deleted( ) );
         }
         catch( ElasticsearchException | IOException e )
         {
-            AppLogService.error( ERROR_REMOVING_PAGE + pageId, e );
+            AppLogService.error( ERROR_REMOVING_PAGE, pageId, e );
         }
     }
 
@@ -614,18 +597,17 @@ public class EmbeddingService
     {
         try
         {
-            ElasticsearchService esService = ElasticsearchService.getInstance( );
-            String indexName = esService.getIndexName( );
+            String indexName = _elasticsearchService.getIndexName( );
 
-            DeleteByQueryResponse response = esService.getClient( ).deleteByQuery( delete -> delete.index( indexName )
+            DeleteByQueryResponse response = _elasticsearchService.getClient( ).deleteByQuery( delete -> delete.index( indexName )
                     .query( q -> q.term( t -> t.field( "metadata.space_id.keyword" ).value( String.valueOf( spaceId ) ) ) ) );
 
             long deletedCount = response.deleted( );
-            AppLogService.info( LOG_REMOVED_SPACE + spaceId + SPACE + deletedCount + " items" );
+            AppLogService.info( LOG_REMOVED_SPACE, spaceId, deletedCount );
         }
         catch( ElasticsearchException | IOException e )
         {
-            AppLogService.error( ERROR_REMOVING_SPACE + spaceId, e );
+            AppLogService.error( ERROR_REMOVING_SPACE, spaceId, e );
         }
     }
 
@@ -639,19 +621,18 @@ public class EmbeddingService
     {
         try
         {
-            ElasticsearchService esService = ElasticsearchService.getInstance( );
-            String indexName = esService.getIndexName( );
+            String indexName = _elasticsearchService.getIndexName( );
 
-            DeleteByQueryResponse response = esService.getClient( )
+            DeleteByQueryResponse response = _elasticsearchService.getClient( )
                     .deleteByQuery( delete -> delete.index( indexName )
                             .query( q -> q.bool( b -> b.must( m -> m.term( t -> t.field( "metadata.type.keyword" ).value( Book.RESOURCE_TYPE ) ) )
                                     .must( m -> m.term( t -> t.field( "metadata.book_id.keyword" ).value( String.valueOf( bookId ) ) ) ) ) ) );
 
-            AppLogService.debug( "Removed " + response.deleted( ) + " chunks for book " + bookId );
+            AppLogService.debug( "Removed {} chunks for book {}", response.deleted( ), bookId );
         }
         catch( ElasticsearchException | IOException e )
         {
-            AppLogService.error( "Error removing book chunks " + bookId, e );
+            AppLogService.error( "Error removing book chunks {}", bookId, e );
         }
     }
 
@@ -665,19 +646,18 @@ public class EmbeddingService
     {
         try
         {
-            ElasticsearchService esService = ElasticsearchService.getInstance( );
-            String indexName = esService.getIndexName( );
+            String indexName = _elasticsearchService.getIndexName( );
 
-            DeleteByQueryResponse response = esService.getClient( )
+            DeleteByQueryResponse response = _elasticsearchService.getClient( )
                     .deleteByQuery( delete -> delete.index( indexName )
                             .query( q -> q.bool( b -> b.must( m -> m.term( t -> t.field( "metadata.type.keyword" ).value( Page.RESOURCE_TYPE ) ) )
                                     .must( m -> m.term( t -> t.field( "metadata.page_id.keyword" ).value( String.valueOf( pageId ) ) ) ) ) ) );
 
-            AppLogService.debug( "Removed " + response.deleted( ) + " chunks for page " + pageId );
+            AppLogService.debug( "Removed {} chunks for page {}", response.deleted( ), pageId );
         }
         catch( ElasticsearchException | IOException e )
         {
-            AppLogService.error( "Error removing page chunks " + pageId, e );
+            AppLogService.error( "Error removing page chunks {}", pageId, e );
         }
     }
 
@@ -685,19 +665,18 @@ public class EmbeddingService
     {
         try
         {
-            ElasticsearchService esService = ElasticsearchService.getInstance( );
-            String indexName = esService.getIndexName( );
+            String indexName = _elasticsearchService.getIndexName( );
 
-            DeleteByQueryResponse response = esService.getClient( )
+            DeleteByQueryResponse response = _elasticsearchService.getClient( )
                     .deleteByQuery( delete -> delete.index( indexName )
                             .query( q -> q.bool( b -> b.must( m -> m.term( t -> t.field( "metadata.type.keyword" ).value( Space.RESOURCE_TYPE ) ) )
                                     .must( m -> m.term( t -> t.field( "metadata.space_id.keyword" ).value( String.valueOf( spaceId ) ) ) ) ) ) );
 
-            AppLogService.debug( "Removed " + response.deleted( ) + " chunks for space " + spaceId );
+            AppLogService.debug( "Removed {} chunks for space {}", response.deleted( ), spaceId );
         }
         catch( ElasticsearchException | IOException e )
         {
-            AppLogService.error( "Error removing space chunks " + spaceId, e );
+            AppLogService.error( "Error removing space chunks {}", spaceId, e );
         }
     }
 
@@ -708,7 +687,7 @@ public class EmbeddingService
     {
         try
         {
-            EmbeddingStore<TextSegment> embeddingStore = ElasticsearchService.getInstance( ).createEmbeddingStore( );
+            EmbeddingStore<TextSegment> embeddingStore = _elasticsearchService.createEmbeddingStore( );
             embeddingStore.removeAll( );
             AppLogService.info( LOG_INDEX_CLEARED );
         }
@@ -745,7 +724,7 @@ public class EmbeddingService
                     {
                         String errorMsg = ERROR_CLEARING_INDEX_MSG + e.getMessage( );
                         _indexingStatus.getSbLogs( ).append( errorMsg ).append( NEWLINE );
-                        AppLogService.error( errorMsg, e );
+                        AppLogService.error( "Error clearing index: {}", e.getMessage( ), e );
                     }
                     finally
                     {
@@ -785,10 +764,9 @@ public class EmbeddingService
 
         try
         {
-            ElasticsearchService esService = ElasticsearchService.getInstance( );
-            String indexName = esService.getIndexName( );
+            String indexName = _elasticsearchService.getIndexName( );
 
-            CountResponse countResponse = esService.getClient( ).count( c -> c.index( indexName ) );
+            CountResponse countResponse = _elasticsearchService.getClient( ).count( c -> c.index( indexName ) );
             long documentCount = countResponse.count( );
 
             stats.put( STATS_KEY_INDEX_NAME, indexName );
@@ -823,7 +801,7 @@ public class EmbeddingService
             _indexingStatus.getSbLogs( ).append( LOG_RECREATING_INDEX ).append( NEWLINE );
             AppLogService.info( LOG_RECREATING_INDEX );
 
-            ElasticsearchService.getInstance( ).createIndexIfNotExists( );
+            _elasticsearchService.createIndexIfNotExists( );
             _indexingStatus.getSbLogs( ).append( LOG_INDEX_RECREATED ).append( NEWLINE );
 
             List<AbstractWikiItem> spaces = WikiItemService.getPublishedItemsByType( WikiItemType.SPACE );

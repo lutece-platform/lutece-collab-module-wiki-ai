@@ -35,10 +35,7 @@ package fr.paris.lutece.plugins.wiki.modules.ai.service.model;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.HashMap;
 import java.util.Map;
-
-import org.springframework.beans.factory.FactoryBean;
 
 import fr.paris.lutece.portal.service.util.AppLogService;
 
@@ -46,50 +43,34 @@ import fr.paris.lutece.portal.service.util.AppLogService;
  * Factory for creating LangChain4j model instances using the builder pattern. This factory dynamically creates model instances by invoking builder methods and
  * setting properties via reflection.
  */
-public class LangChain4jModelFactory implements FactoryBean<Object>
+public class LangChain4jModelFactory
 {
     private static final String METHOD_BUILDER = "builder";
     private static final String METHOD_BUILD = "build";
-    private static final String ERROR_SETTING_PROPERTY = "Error setting property: ";
-    private static final String ERROR_ON_BUILDER = " on builder: ";
-    private static final String ERROR_MODEL_CLASS_NOT_FOUND = "Model class not found: ";
+    private static final String ERROR_SETTING_PROPERTY = "Error setting property: {} on builder: {}";
 
-    private String _modelClass;
-    private Map<String, Object> _properties = new HashMap<>( );
-
-    /**
-     * Sets the fully qualified class name of the model to be created.
-     *
-     * @param modelClass
-     *            the model class name
-     */
-    public void setModelClass( String modelClass )
+    private LangChain4jModelFactory( )
     {
-        _modelClass = modelClass;
     }
 
     /**
-     * Sets the properties to be applied to the model builder.
+     * Creates a model instance using the builder pattern and reflection.
      *
+     * @param strModelClass
+     *            the fully qualified class name of the model
      * @param properties
-     *            the properties map
+     *            the properties to set on the builder
+     * @return the created model instance
+     * @throws Exception
+     *             if model creation fails
      */
-    public void setProperties( Map<String, Object> properties )
+    public static Object createModel( String strModelClass, Map<String, Object> properties ) throws Exception
     {
-        _properties = properties;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public Object getObject( ) throws Exception
-    {
-        Class<?> modelClass = Class.forName( _modelClass );
+        Class<?> modelClass = Class.forName( strModelClass );
         Method builderMethod = modelClass.getMethod( METHOD_BUILDER );
         Object builder = builderMethod.invoke( null );
 
-        for ( Map.Entry<String, Object> entry : _properties.entrySet( ) )
+        for ( Map.Entry<String, Object> entry : properties.entrySet( ) )
         {
             String propertyName = entry.getKey( );
             Object propertyValue = entry.getValue( );
@@ -105,41 +86,12 @@ public class LangChain4jModelFactory implements FactoryBean<Object>
             }
             catch( IllegalAccessException | InvocationTargetException e )
             {
-                AppLogService.error( ERROR_SETTING_PROPERTY + propertyName + ERROR_ON_BUILDER + builder.getClass( ).getName( ), e );
+                AppLogService.error( ERROR_SETTING_PROPERTY, propertyName, builder.getClass( ).getName( ), e );
             }
         }
 
         Method buildMethod = builder.getClass( ).getMethod( METHOD_BUILD );
         return buildMethod.invoke( builder );
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public Class<?> getObjectType( )
-    {
-        if ( _modelClass != null )
-        {
-            try
-            {
-                return Class.forName( _modelClass );
-            }
-            catch( ClassNotFoundException e )
-            {
-                AppLogService.error( ERROR_MODEL_CLASS_NOT_FOUND + _modelClass, e );
-            }
-        }
-        return null;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public boolean isSingleton( )
-    {
-        return true;
     }
 
     /**
@@ -151,7 +103,7 @@ public class LangChain4jModelFactory implements FactoryBean<Object>
      *            the property name
      * @return the matching setter method, or null if not found
      */
-    private Method findSetterMethod( Class<?> builderClass, String propertyName )
+    private static Method findSetterMethod( Class<?> builderClass, String propertyName )
     {
         Method [ ] methods = builderClass.getMethods( );
         for ( Method method : methods )
@@ -173,7 +125,7 @@ public class LangChain4jModelFactory implements FactoryBean<Object>
      *            the target type
      * @return the converted value
      */
-    private Object convertValue( Object value, Class<?> targetType )
+    private static Object convertValue( Object value, Class<?> targetType )
     {
         if ( value == null || targetType.isInstance( value ) )
         {

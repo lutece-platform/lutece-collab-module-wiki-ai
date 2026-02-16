@@ -54,11 +54,13 @@ import dev.langchain4j.store.embedding.elasticsearch.ElasticsearchEmbeddingStore
 import fr.paris.lutece.portal.service.init.ShutdownService;
 import fr.paris.lutece.portal.service.util.AppLogService;
 import fr.paris.lutece.portal.service.util.AppPropertiesService;
+import jakarta.annotation.PostConstruct;
+import jakarta.enterprise.context.ApplicationScoped;
 
 /**
- * Service for managing Elasticsearch connections and embedding stores for wiki AI. Implements singleton pattern and ShutdownService for proper resource
- * cleanup.
+ * Service for managing Elasticsearch connections and embedding stores for wiki AI. Implements ShutdownService for proper resource cleanup.
  */
+@ApplicationScoped
 public class ElasticsearchService implements ShutdownService
 {
     private static final String PROPERTY_ES_HOST = "wiki.ai.elasticsearch.host";
@@ -73,18 +75,11 @@ public class ElasticsearchService implements ShutdownService
     private static final String INDEX_SUFFIX = "embeddings";
     private static final String SERVER_URL_FORMAT = "%s://%s:%d";
 
-    private static final String ES_HOST = AppPropertiesService.getProperty( PROPERTY_ES_HOST );
-    private static final int ES_PORT = AppPropertiesService.getPropertyInt( PROPERTY_ES_PORT, DEFAULT_ES_PORT );
-    private static final String ES_PROTOCOL = AppPropertiesService.getProperty( PROPERTY_ES_PROTOCOL );
-    private static final String ES_USERNAME = AppPropertiesService.getProperty( PROPERTY_ES_USERNAME );
-    private static final String ES_PASSWORD = AppPropertiesService.getProperty( PROPERTY_ES_PASSWORD );
-    private static final String INDEX_PREFIX = AppPropertiesService.getProperty( PROPERTY_ELASTICSEARCH_INDEX_PREFIX, DEFAULT_INDEX_PREFIX );
-
-    private static final String LOG_ELASTICSEARCH_URL = "Elasticsearch URL: ";
-    private static final String LOG_CREATED_INDEX = "Created Elasticsearch index: ";
+    private static final String LOG_ELASTICSEARCH_URL = "Elasticsearch URL: {}";
+    private static final String LOG_CREATED_INDEX = "Created Elasticsearch index: {}";
     private static final String LOG_CLIENT_CLOSED = "Elasticsearch clients closed successfully";
-    private static final String LOG_ERROR_CLOSING = "Error closing Elasticsearch clients: ";
-    private static final String ERROR_CREATING_INDEX = "Error creating Elasticsearch index: ";
+    private static final String LOG_ERROR_CLOSING = "Error closing Elasticsearch clients: {}";
+    private static final String ERROR_CREATING_INDEX = "Error creating Elasticsearch index: {}";
     private static final String ERROR_FAILED_CREATE_INDEX = "Failed to create Elasticsearch index";
 
     private static final int NUM_CANDIDATES = 100;
@@ -94,25 +89,28 @@ public class ElasticsearchService implements ShutdownService
     private static final String MAPPING_PROPERTY_TEXT = "text";
     private static final String MAPPING_PROPERTY_VECTOR = "vector";
 
-    private static class SingletonHolder
-    {
-        static final ElasticsearchService INSTANCE = new ElasticsearchService( );
-    }
-
-    private final RestClient _restClient;
-    private final RestClientTransport _transport;
-    private final ElasticsearchClient _client;
-    private final String _indexName;
+    private RestClient _restClient;
+    private RestClientTransport _transport;
+    private ElasticsearchClient _client;
+    private String _indexName;
 
     /**
-     * Private constructor to ensure singleton pattern.
+     * Initializes the Elasticsearch connections after CDI construction.
      */
-    private ElasticsearchService( )
+    @PostConstruct
+    public void init( )
     {
-        _restClient = createRestClient( );
+        String esHost = AppPropertiesService.getProperty( PROPERTY_ES_HOST );
+        int esPort = AppPropertiesService.getPropertyInt( PROPERTY_ES_PORT, DEFAULT_ES_PORT );
+        String esProtocol = AppPropertiesService.getProperty( PROPERTY_ES_PROTOCOL );
+        String esUsername = AppPropertiesService.getProperty( PROPERTY_ES_USERNAME );
+        String esPassword = AppPropertiesService.getProperty( PROPERTY_ES_PASSWORD );
+        String indexPrefix = AppPropertiesService.getProperty( PROPERTY_ELASTICSEARCH_INDEX_PREFIX, DEFAULT_INDEX_PREFIX );
+
+        _restClient = createRestClient( esProtocol, esHost, esPort, esUsername, esPassword );
         _transport = new RestClientTransport( _restClient, new JacksonJsonpMapper( ) );
         _client = new ElasticsearchClient( _transport );
-        _indexName = INDEX_PREFIX + INDEX_SUFFIX;
+        _indexName = indexPrefix + INDEX_SUFFIX;
 
         createIndexIfNotExists( );
     }
@@ -120,33 +118,33 @@ public class ElasticsearchService implements ShutdownService
     /**
      * Creates and configures the RestClient instance with authentication if needed.
      *
+     * @param protocol
+     *            the protocol (http/https)
+     * @param host
+     *            the Elasticsearch host
+     * @param port
+     *            the Elasticsearch port
+     * @param username
+     *            the username (can be null)
+     * @param password
+     *            the password (can be null)
      * @return configured RestClient instance
      */
-    private RestClient createRestClient( )
+    private RestClient createRestClient( String protocol, String host, int port, String username, String password )
     {
-        String serverUrl = String.format( SERVER_URL_FORMAT, ES_PROTOCOL, ES_HOST, ES_PORT );
-        AppLogService.info( LOG_ELASTICSEARCH_URL + serverUrl );
+        String serverUrl = String.format( SERVER_URL_FORMAT, protocol, host, port );
+        AppLogService.info( LOG_ELASTICSEARCH_URL, serverUrl );
 
         RestClientBuilder builder = RestClient.builder( HttpHost.create( serverUrl ) );
 
-        if ( ES_USERNAME != null && !ES_USERNAME.isEmpty( ) )
+        if ( username != null && !username.isEmpty( ) )
         {
             CredentialsProvider creds = new BasicCredentialsProvider( );
-            creds.setCredentials( AuthScope.ANY, new UsernamePasswordCredentials( ES_USERNAME, ES_PASSWORD ) );
+            creds.setCredentials( AuthScope.ANY, new UsernamePasswordCredentials( username, password ) );
             builder.setHttpClientConfigCallback( h -> h.setDefaultCredentialsProvider( creds ) );
         }
 
         return builder.build( );
-    }
-
-    /**
-     * Returns the singleton instance of ElasticsearchService.
-     *
-     * @return the singleton instance
-     */
-    public static ElasticsearchService getInstance( )
-    {
-        return SingletonHolder.INSTANCE;
     }
 
     /**
@@ -184,7 +182,7 @@ public class ElasticsearchService implements ShutdownService
     /**
      * Creates the Elasticsearch index if it does not exist.
      */
-    public final void createIndexIfNotExists( )
+    public void createIndexIfNotExists( )
     {
         try
         {
@@ -196,12 +194,12 @@ public class ElasticsearchService implements ShutdownService
                         MAPPING_PROPERTY_VECTOR,
                         p -> p.denseVector( dv -> dv.indexOptions( dvio -> dvio.m( HNSW_M ).efConstruction( HNSW_EF_CONSTRUCTION ).type( HNSW_TYPE ) ) ) ) ) );
 
-                AppLogService.info( LOG_CREATED_INDEX + _indexName );
+                AppLogService.info( LOG_CREATED_INDEX, _indexName );
             }
         }
         catch( ElasticsearchException | IOException e )
         {
-            AppLogService.error( ERROR_CREATING_INDEX + _indexName, e );
+            AppLogService.error( ERROR_CREATING_INDEX, _indexName, e );
             throw new RuntimeException( ERROR_FAILED_CREATE_INDEX, e );
         }
     }
@@ -233,7 +231,7 @@ public class ElasticsearchService implements ShutdownService
         }
         catch( IOException e )
         {
-            AppLogService.error( LOG_ERROR_CLOSING + e.getMessage( ), e );
+            AppLogService.error( LOG_ERROR_CLOSING, e.getMessage( ), e );
         }
     }
 }

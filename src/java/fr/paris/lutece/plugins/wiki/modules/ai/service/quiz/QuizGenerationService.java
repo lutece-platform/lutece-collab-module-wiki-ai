@@ -62,11 +62,15 @@ import fr.paris.lutece.plugins.wiki.modules.ai.business.QuizGeneratedQuestionHom
 import fr.paris.lutece.plugins.wiki.modules.ai.business.QuizGenerationWorkflow;
 import fr.paris.lutece.plugins.wiki.modules.ai.business.QuizGenerationWorkflowHome;
 import fr.paris.lutece.plugins.wiki.modules.ai.business.WorkflowStatus;
-import fr.paris.lutece.plugins.wiki.modules.ai.service.model.ModelService;
 import fr.paris.lutece.plugins.wiki.modules.ai.service.tools.CreateQuizQuestionTool;
+
 import fr.paris.lutece.plugins.wiki.modules.quiz.service.QuizService;
 import fr.paris.lutece.portal.service.util.AppLogService;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import jakarta.inject.Named;
 
+@ApplicationScoped
 public class QuizGenerationService
 {
     interface QuizGenerator
@@ -90,23 +94,13 @@ public class QuizGenerationService
 
     private static final ObjectMapper _objectMapper = new ObjectMapper( );
 
-    private static class SingletonHolder
-    {
-        static final QuizGenerationService INSTANCE = new QuizGenerationService( );
-    }
-
-    private QuizGenerationService( )
-    {
-    }
-
-    public static QuizGenerationService getInstance( )
-    {
-        return SingletonHolder.INSTANCE;
-    }
+    @Inject
+    @Named( "wiki-ai.chatModel" )
+    private ChatModel _chatModel;
 
     public void processWorkflow( QuizGenerationWorkflow workflow )
     {
-        AppLogService.info( "QuizGeneration: Starting workflow " + workflow.getId( ) + " for quiz " + workflow.getIdQuiz( ) );
+        AppLogService.info( "QuizGeneration: Starting workflow {} for quiz {}", workflow.getId( ), workflow.getIdQuiz( ) );
 
         List<Integer> pageIds = parsePageIds( workflow.getSelectedPageIds( ) );
         workflow.setStatus( WorkflowStatus.PROCESSING );
@@ -116,7 +110,7 @@ public class QuizGenerationService
 
         try
         {
-            AppLogService.info( "QuizGeneration: Found " + pageIds.size( ) + " pages to process: " + pageIds );
+            AppLogService.info( "QuizGeneration: Found {} pages to process: {}", pageIds.size( ), pageIds );
 
             String strLocale = workflow.getLocale( ) != null ? workflow.getLocale( ) : "en";
             Locale locale = Locale.forLanguageTag( strLocale );
@@ -130,11 +124,11 @@ public class QuizGenerationService
 
             workflow.setStatus( WorkflowStatus.COMPLETED );
             workflow.setDateCompletion( new Timestamp( System.currentTimeMillis( ) ) );
-            AppLogService.info( "QuizGeneration: Workflow " + workflow.getId( ) + " completed successfully" );
+            AppLogService.info( "QuizGeneration: Workflow {} completed successfully", workflow.getId( ) );
         }
         catch( Throwable t )
         {
-            AppLogService.error( "QuizGeneration: Error processing workflow " + workflow.getId( ), t );
+            AppLogService.error( "QuizGeneration: Error processing workflow {}", workflow.getId( ), t );
             workflow.setStatus( WorkflowStatus.ERROR );
             workflow.setErrorMessage( t.getMessage( ) );
             workflow.setDateCompletion( new Timestamp( System.currentTimeMillis( ) ) );
@@ -145,12 +139,12 @@ public class QuizGenerationService
 
     private void processPage( int nWorkflowId, int nPageId, Locale locale )
     {
-        AppLogService.info( "QuizGeneration: Processing page " + nPageId );
+        AppLogService.info( "QuizGeneration: Processing page {}", nPageId );
 
         Optional<AbstractWikiItem> optPage = WikiItemHome.findByPrimaryKey( nPageId );
         if ( optPage.isEmpty( ) || optPage.get( ).getType( ) != WikiItemType.PAGE )
         {
-            AppLogService.info( "QuizGeneration: Page " + nPageId + " not found or not a PAGE type" );
+            AppLogService.info( "QuizGeneration: Page {} not found or not a PAGE type", nPageId );
             return;
         }
 
@@ -158,33 +152,32 @@ public class QuizGenerationService
         Revision revision = RevisionService.getCurrentRevision( nPageId );
         if ( revision == null )
         {
-            AppLogService.info( "QuizGeneration: Page " + nPageId + " has no current revision" );
+            AppLogService.info( "QuizGeneration: Page {} has no current revision", nPageId );
             return;
         }
 
         String content = revision.getContent( );
         if ( content == null || content.trim( ).isEmpty( ) )
         {
-            AppLogService.info( "QuizGeneration: Page " + nPageId + " has empty content" );
+            AppLogService.info( "QuizGeneration: Page {} has empty content", nPageId );
             return;
         }
 
         String pageTitle = revision.getTitle( ) != null ? revision.getTitle( ) : page.getCode( );
-        AppLogService.info( "QuizGeneration: Processing page '" + pageTitle + "' with " + content.length( ) + " chars" );
+        AppLogService.info( "QuizGeneration: Processing page '{}' with {} chars", pageTitle, content.length( ) );
 
-        ChatModel chatModel = ModelService.getInstance( ).getChatModel( );
         CreateQuizQuestionTool tool = new CreateQuizQuestionTool( nWorkflowId, nPageId );
 
         String systemPrompt = buildSystemPrompt( locale );
-        QuizGenerator generator = AiServices.builder( QuizGenerator.class ).chatModel( chatModel ).tools( tool )
+        QuizGenerator generator = AiServices.builder( QuizGenerator.class ).chatModel( _chatModel ).tools( tool )
                 .systemMessageProvider( chatMemoryId -> systemPrompt ).build( );
 
         String prompt = "Page: " + pageTitle + "\n\nContent:\n" + content;
-        AppLogService.info( "QuizGeneration: Calling AI for page " + nPageId + " with prompt length " + prompt.length( ) );
+        AppLogService.info( "QuizGeneration: Calling AI for page {} with prompt length {}", nPageId, prompt.length( ) );
 
         String response = generator.generate( prompt );
-        AppLogService.info( "QuizGeneration: AI response for page " + nPageId + ": " + response );
-        AppLogService.info( "QuizGeneration: Tool generated " + tool.getGeneratedQuestions( ).size( ) + " questions for page " + nPageId );
+        AppLogService.info( "QuizGeneration: AI response for page {}: {}", nPageId, response );
+        AppLogService.info( "QuizGeneration: Tool generated {} questions for page {}", tool.getGeneratedQuestions( ).size( ), nPageId );
     }
 
     private String buildSystemPrompt( Locale locale )

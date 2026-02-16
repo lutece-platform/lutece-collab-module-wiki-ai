@@ -40,10 +40,12 @@ import java.util.Optional;
 
 import fr.paris.lutece.portal.service.plugin.Plugin;
 import fr.paris.lutece.util.sql.DAOUtil;
+import jakarta.enterprise.context.ApplicationScoped;
 
 /**
  * AiFeatureDAO implementation for database operations
  */
+@ApplicationScoped
 public class AiFeatureDAO implements IAiFeatureDAO
 {
     private static final String SQL_QUERY_INSERT = "INSERT INTO wiki_ai_feature (name, type, prompt_template, is_active, order_num, display_mode) VALUES (?, ?, ?, ?, ?, ?)";
