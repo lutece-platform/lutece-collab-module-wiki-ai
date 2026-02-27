@@ -34,24 +34,19 @@
 package fr.paris.lutece.plugins.wiki.modules.ai.service.rate;
 
 import fr.paris.lutece.portal.service.daemon.Daemon;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
+import jakarta.enterprise.inject.spi.CDI;
 
 /**
  * Daemon to clean up expired AI rate limit entries
  */
-@ApplicationScoped
 public class AiRateLimitCleanupDaemon extends Daemon
 {
     private static final String LOG_CLEANUP_COMPLETED = "AI rate limit cleanup completed successfully";
 
-    @Inject
-    private AiRateLimitService _aiRateLimitService;
-
     @Override
     public void run( )
     {
-        _aiRateLimitService.cleanExpiredEntries( );
+        CDI.current( ).select( AiRateLimitService.class ).get( ).cleanExpiredEntries( );
         setLastRunLogs( LOG_CLEANUP_COMPLETED );
     }
 }

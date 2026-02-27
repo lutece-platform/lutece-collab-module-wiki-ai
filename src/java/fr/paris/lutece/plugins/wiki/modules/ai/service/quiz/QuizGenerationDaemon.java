@@ -39,10 +39,8 @@ import fr.paris.lutece.plugins.wiki.modules.ai.business.QuizGenerationWorkflow;
 import fr.paris.lutece.plugins.wiki.modules.ai.business.QuizGenerationWorkflowHome;
 import fr.paris.lutece.portal.service.daemon.Daemon;
 import fr.paris.lutece.portal.service.util.AppLogService;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
+import jakarta.enterprise.inject.spi.CDI;
 
-@ApplicationScoped
 public class QuizGenerationDaemon extends Daemon
 {
     private static final String LOG_START = "QuizGenerationDaemon: Starting...";
@@ -52,9 +50,6 @@ public class QuizGenerationDaemon extends Daemon
     private static final String LOG_ERROR = "QuizGenerationDaemon: Error processing workflow #";
     private static final String LOG_ERROR_PARAMETERIZED = "QuizGenerationDaemon: Error processing workflow #{}";
     private static final String NEWLINE = "\r\n";
-
-    @Inject
-    private QuizGenerationService _quizGenerationService;
 
     @Override
     public void run( )
@@ -76,7 +71,7 @@ public class QuizGenerationDaemon extends Daemon
 
         try
         {
-            _quizGenerationService.processWorkflow( workflow );
+            CDI.current( ).select( QuizGenerationService.class ).get( ).processWorkflow( workflow );
             sbLogs.append( LOG_COMPLETED ).append( workflow.getId( ) ).append( NEWLINE );
         }
         catch( Exception e )

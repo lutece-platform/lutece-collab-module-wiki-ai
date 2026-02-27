@@ -44,13 +44,11 @@ import fr.paris.lutece.plugins.wiki.modules.ai.service.WikiAIPlugin;
 import fr.paris.lutece.plugins.wiki.modules.ai.service.rag.EmbeddingService;
 import fr.paris.lutece.portal.service.daemon.Daemon;
 import fr.paris.lutece.portal.service.util.AppLogService;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
+import jakarta.enterprise.inject.spi.CDI;
 
 /**
  * WikiAIIncrementalIndexationDaemon Daemon for processing incremental indexation of Wiki AI items
  */
-@ApplicationScoped
 public class WikiAIIncrementalIndexationDaemon extends Daemon
 {
     private static final String UNDERSCORE_SEPARATOR = "_";
@@ -65,9 +63,6 @@ public class WikiAIIncrementalIndexationDaemon extends Daemon
     private static final String LOG_ACTIONS = " actions.";
     private static final String ERROR_INVALID_DOCUMENT_ID = "Invalid document ID format: {}";
     private static final String NEWLINE = "\r\n";
-
-    @Inject
-    private EmbeddingService _embeddingService;
 
     /**
      * {@inheritDoc}
@@ -142,7 +137,7 @@ public class WikiAIIncrementalIndexationDaemon extends Daemon
 
         int entityId = Integer.parseInt( parts [1] );
 
-        _embeddingService.indexItem( entityId );
+        CDI.current( ).select( EmbeddingService.class ).get( ).indexItem( entityId );
     }
 
     /**
@@ -167,15 +162,15 @@ public class WikiAIIncrementalIndexationDaemon extends Daemon
         switch( resourceType.toLowerCase( ) )
         {
             case Space.RESOURCE_TYPE:
-                _embeddingService.removeSpace( entityId );
+                CDI.current( ).select( EmbeddingService.class ).get( ).removeSpace( entityId );
                 break;
 
             case Book.RESOURCE_TYPE:
-                _embeddingService.removeBook( entityId );
+                CDI.current( ).select( EmbeddingService.class ).get( ).removeBook( entityId );
                 break;
 
             case Page.RESOURCE_TYPE:
-                _embeddingService.removePage( entityId );
+                CDI.current( ).select( EmbeddingService.class ).get( ).removePage( entityId );
                 break;
 
             default:
