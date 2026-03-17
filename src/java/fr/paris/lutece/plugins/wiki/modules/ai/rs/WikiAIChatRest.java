@@ -145,6 +145,8 @@ public class WikiAIChatRest extends AbstractRestEndpoint
     private StreamingService _sseStreamManager;
     @Inject
     private WikiEventService _eventService;
+    @jakarta.annotation.Resource
+    private jakarta.enterprise.concurrent.ManagedExecutorService _managedExecutor;
     /**
      * Creates a new conversation for the authenticated user.
      *
@@ -311,7 +313,7 @@ public class WikiAIChatRest extends AbstractRestEndpoint
                 AppLogService.error( LOG_ERROR_EXECUTING_STREAMING, e.getMessage( ), e );
                 sendErrorEvent( streamId, e.getMessage( ) );
             }
-        } );
+        }, _managedExecutor );
     }
 
     /**
