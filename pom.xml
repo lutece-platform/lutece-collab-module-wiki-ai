@@ -91,7 +91,7 @@
     </dependencies>
 
     <properties>
-        <targetJdk>21</targetJdk>
+        <targetJdk>17</targetJdk>
         <componentName>wiki-ai</componentName>
         <jiraProjectName>WIKIAI</jiraProjectName>
         <jiraComponentId>10999</jiraComponentId>
