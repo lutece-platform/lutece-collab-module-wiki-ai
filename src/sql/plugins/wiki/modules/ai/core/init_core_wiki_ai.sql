@@ -1,3 +1,1 @@
 --liquibase formatted sql
---changeset wiki-ai:init_core_wiki_ai.sql
---preconditions onFail:MARK_RAN onError:WARN
