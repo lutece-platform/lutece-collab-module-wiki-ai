@@ -1,4 +1,5 @@
 <#ftl output_format="HTML">
+<#if user??>
 <link rel="stylesheet" href="css/plugins/wiki/github-highlight.css">
 <link rel="stylesheet" href="css/plugins/wiki/wiki-marked.css">
 <link rel="stylesheet" href="css/plugins/wiki/wiki-chat.css">
@@ -86,3 +87,4 @@ document.addEventListener('DOMContentLoaded', function() {
     WikiAIChat.init({});
 });
 </script>
+</#if>
