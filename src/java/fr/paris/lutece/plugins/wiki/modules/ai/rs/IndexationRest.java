@@ -41,6 +41,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
@@ -59,6 +60,7 @@ import fr.paris.lutece.portal.service.admin.AdminAuthenticationService;
 public class IndexationRest extends AbstractRestEndpoint
 {
     private static final String PATH_FULL = "full";
+    private static final String PATH_SPACE = "space/{code}";
     private static final String PATH_CLEAR = "clear";
     private static final String PATH_STATUS = "status";
     private static final String PATH_STATS = "stats";
@@ -90,6 +92,39 @@ public class IndexationRest extends AbstractRestEndpoint
         {
             _embeddingService.reindexAll( );
             return createSuccessResponse( WikiAIRestConstants.SUCCESS_INDEX_STARTED );
+        }
+        catch( Exception e )
+        {
+            return handleException( e, LOG_ERROR_INDEXATION );
+        }
+    }
+
+    /**
+     * Triggers the reindexation of a specific space and all its descendant items.
+     *
+     * @param code
+     *            the space code
+     * @return response containing success message or error details
+     */
+    @POST
+    @Path( PATH_SPACE )
+    @Produces( MediaType.APPLICATION_JSON )
+    public Response indexSpace( @PathParam( "code" ) String code )
+    {
+        if ( !isAuthorized( ) )
+        {
+            return createUnauthorizedResponse( );
+        }
+
+        if ( code == null || code.trim( ).isEmpty( ) )
+        {
+            return createErrorResponse( Response.Status.BAD_REQUEST, WikiAIRestConstants.ERROR_SPACE_CODE_REQUIRED );
+        }
+
+        try
+        {
+            _embeddingService.reindexSpace( code.trim( ) );
+            return createSuccessResponse( WikiAIRestConstants.SUCCESS_INDEX_SPACE_STARTED );
         }
         catch( Exception e )
         {

@@ -61,6 +61,8 @@ public final class WikiAIRestConstants
     public static final String KEY_TOKEN = "token";
 
     public static final String SUCCESS_INDEX_STARTED = "Indexation lancée avec succès";
+    public static final String SUCCESS_INDEX_SPACE_STARTED = "Indexation du space lancée avec succès";
+    public static final String ERROR_SPACE_CODE_REQUIRED = "Le code du space est obligatoire";
     public static final String SUCCESS_CLEAR_STARTED = "Nettoyage de l'index lancé avec succès";
 
     /**

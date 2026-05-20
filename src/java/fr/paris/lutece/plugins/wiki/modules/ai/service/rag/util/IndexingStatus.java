@@ -36,6 +36,7 @@ package fr.paris.lutece.plugins.wiki.modules.ai.service.rag.util;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import jakarta.json.bind.annotation.JsonbTransient;
 
 /**
  * Tracks the indexing status of wiki content in Elasticsearch. Thread-safe implementation for concurrent access.
@@ -45,8 +46,10 @@ public class IndexingStatus
     private int _nNbTotalObj;
     private int _nCurrentNbIndexedObj;
     @JsonIgnore
+    @JsonbTransient
     private final AtomicBoolean _bIsRunning = new AtomicBoolean( false );
     @JsonIgnore
+    @JsonbTransient
     private StringBuilder _sbLogs;
 
     /**
@@ -97,6 +100,7 @@ public class IndexingStatus
      * @return the running flag
      */
     @JsonIgnore
+    @JsonbTransient
     public AtomicBoolean getIsRunning( )
     {
         return _bIsRunning;
@@ -146,6 +150,7 @@ public class IndexingStatus
      * @return the StringBuilder
      */
     @JsonIgnore
+    @JsonbTransient
     public StringBuilder getSbLogs( )
     {
         if ( _sbLogs == null )

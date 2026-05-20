@@ -38,7 +38,6 @@ import java.util.List;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import fr.paris.lutece.plugins.wiki.business.item.AbstractWikiItem;
-import fr.paris.lutece.plugins.wiki.business.item.WikiItemHome;
 import fr.paris.lutece.plugins.wiki.business.item.WikiItemType;
 import fr.paris.lutece.plugins.wiki.business.revision.Revision;
 import fr.paris.lutece.plugins.wiki.business.revision.RevisionHome;
@@ -113,16 +112,16 @@ public class WikiBrowseSpaceTool extends AbstractWikiTool
 
         appendDescription( sb, spaceRevision );
 
-        List<AbstractWikiItem> categories = WikiItemHome.getWikiItemsByParentAndType( space.getId( ), WikiItemType.CATEGORY );
+        List<AbstractWikiItem> children = WikiItemService.getItemsByParent( space.getId( ) );
 
-        if ( categories.isEmpty( ) )
+        if ( children.isEmpty( ) )
         {
             sb.append( MSG_NO_CATEGORIES );
             return sb.toString( );
         }
 
         sb.append( MSG_CATEGORIES_HEADER );
-        appendCategories( sb, categories );
+        appendChildrenRecursive( sb, space.getId( ), 3 );
 
         sb.append( MSG_BROWSE_BOOK_HINT );
         sb.append( MSG_CITATION_INSTRUCTION );
@@ -160,68 +159,65 @@ public class WikiBrowseSpaceTool extends AbstractWikiTool
     }
 
     /**
-     * Appends the formatted categories list to the StringBuilder.
+     * Recursively appends categories, sub-categories and books to the StringBuilder.
      *
      * @param sb
      *            the StringBuilder to append to
-     * @param categories
-     *            the list of category items
+     * @param parentId
+     *            the parent item ID
+     * @param depth
+     *            the current heading depth (3 = ###, 4 = ####, etc.)
      */
-    private void appendCategories( StringBuilder sb, List<AbstractWikiItem> categories )
+    private void appendChildrenRecursive( StringBuilder sb, int parentId, int depth )
     {
-        for ( AbstractWikiItem category : categories )
+        List<AbstractWikiItem> children = WikiItemService.getItemsByParent( parentId );
+
+        for ( AbstractWikiItem child : children )
         {
-            if ( !WikiAccessControlService.canView( _user, category ) )
+            if ( !WikiAccessControlService.canView( _user, child ) )
             {
                 continue;
             }
 
-            Revision catRevision = RevisionHome.getCurrentRevision( category.getId( ) );
-            String catTitle = extractTitle( catRevision, category.getCode( ) );
-
-            sb.append( "### " ).append( catTitle ).append( "\n" );
-
-            List<AbstractWikiItem> books = WikiItemHome.getWikiItemsByParentAndType( category.getId( ), WikiItemType.BOOK );
-            appendBooks( sb, books );
-            sb.append( "\n" );
-        }
-    }
-
-    /**
-     * Appends the formatted books list to the StringBuilder.
-     *
-     * @param sb
-     *            the StringBuilder to append to
-     * @param books
-     *            the list of book items
-     */
-    private void appendBooks( StringBuilder sb, List<AbstractWikiItem> books )
-    {
-        if ( books.isEmpty( ) )
-        {
-            sb.append( MSG_NO_BOOKS );
-            return;
-        }
-
-        for ( AbstractWikiItem book : books )
-        {
-            if ( !WikiAccessControlService.canView( _user, book ) )
+            if ( child.getType( ) == WikiItemType.CATEGORY )
             {
-                continue;
+                Revision catRevision = RevisionHome.getCurrentRevision( child.getId( ) );
+                String catTitle = extractTitle( catRevision, child.getCode( ) );
+
+                sb.append( "#".repeat( Math.min( depth, 6 ) ) ).append( " " ).append( catTitle ).append( "\n" );
+                appendChildrenRecursive( sb, child.getId( ), depth + 1 );
+                sb.append( "\n" );
             }
-
-            Revision bookRevision = RevisionHome.getCurrentRevision( book.getId( ) );
-            String bookTitle = extractTitle( bookRevision, book.getCode( ) );
-            String bookDesc = ( bookRevision != null && bookRevision.getDescription( ) != null ) ? bookRevision.getDescription( ) : "";
-
-            addSource( book, bookTitle );
-
-            sb.append( "- **" ).append( bookTitle ).append( "** (`" ).append( book.getCode( ) ).append( "`)" );
-            if ( !bookDesc.isEmpty( ) )
+            else if ( child.getType( ) == WikiItemType.BOOK )
             {
-                sb.append( ": " ).append( bookDesc );
+                Revision bookRevision = RevisionHome.getCurrentRevision( child.getId( ) );
+                String bookTitle = extractTitle( bookRevision, child.getCode( ) );
+                String bookDesc = ( bookRevision != null && bookRevision.getDescription( ) != null ) ? bookRevision.getDescription( ) : "";
+
+                addSource( child, bookTitle );
+
+                sb.append( "- **" ).append( bookTitle ).append( "** (`" ).append( child.getCode( ) ).append( "`)" );
+                if ( !bookDesc.isEmpty( ) )
+                {
+                    sb.append( ": " ).append( bookDesc );
+                }
+                sb.append( "\n" );
             }
-            sb.append( "\n" );
+            else if ( child.getType( ) == WikiItemType.PAGE )
+            {
+                Revision pageRevision = RevisionHome.getCurrentRevision( child.getId( ) );
+                String pageTitle = extractTitle( pageRevision, child.getCode( ) );
+                String pageDesc = ( pageRevision != null && pageRevision.getDescription( ) != null ) ? pageRevision.getDescription( ) : "";
+
+                addSource( child, pageTitle );
+
+                sb.append( "- **" ).append( pageTitle ).append( "** (`" ).append( child.getCode( ) ).append( "`)" );
+                if ( !pageDesc.isEmpty( ) )
+                {
+                    sb.append( ": " ).append( pageDesc );
+                }
+                sb.append( "\n" );
+            }
         }
     }
 }

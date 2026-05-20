@@ -38,7 +38,6 @@ import java.util.List;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import fr.paris.lutece.plugins.wiki.business.item.AbstractWikiItem;
-import fr.paris.lutece.plugins.wiki.business.item.WikiItemHome;
 import fr.paris.lutece.plugins.wiki.business.item.WikiItemType;
 import fr.paris.lutece.plugins.wiki.business.revision.Revision;
 import fr.paris.lutece.plugins.wiki.business.revision.RevisionHome;
@@ -113,16 +112,16 @@ public class WikiBrowseBookTool extends AbstractWikiTool
 
         appendDescription( sb, bookRevision );
 
-        List<AbstractWikiItem> chapters = WikiItemHome.getWikiItemsByParentAndType( book.getId( ), WikiItemType.CHAPTER );
+        List<AbstractWikiItem> children = WikiItemService.getItemsByParent( book.getId( ) );
 
-        if ( chapters.isEmpty( ) )
+        if ( children.isEmpty( ) )
         {
             sb.append( MSG_NO_CHAPTERS );
             return sb.toString( );
         }
 
         sb.append( MSG_CHAPTERS_HEADER );
-        appendChapters( sb, chapters );
+        appendChaptersRecursive( sb, book.getId( ), 3 );
 
         sb.append( MSG_READ_CONTENT_HINT );
         sb.append( MSG_CITATION_INSTRUCTION );
@@ -160,68 +159,51 @@ public class WikiBrowseBookTool extends AbstractWikiTool
     }
 
     /**
-     * Appends the formatted chapters list to the StringBuilder.
+     * Recursively appends chapters and their children (sub-chapters and pages) to the StringBuilder.
      *
      * @param sb
      *            the StringBuilder to append to
-     * @param chapters
-     *            the list of chapter items
+     * @param parentId
+     *            the parent item ID
+     * @param depth
+     *            the current heading depth (3 = ###, 4 = ####, etc.)
      */
-    private void appendChapters( StringBuilder sb, List<AbstractWikiItem> chapters )
+    private void appendChaptersRecursive( StringBuilder sb, int parentId, int depth )
     {
-        for ( AbstractWikiItem chapter : chapters )
+        List<AbstractWikiItem> children = WikiItemService.getItemsByParent( parentId );
+
+        for ( AbstractWikiItem child : children )
         {
-            if ( !WikiAccessControlService.canView( _user, chapter ) )
+            if ( !WikiAccessControlService.canView( _user, child ) )
             {
                 continue;
             }
 
-            Revision chapterRevision = RevisionHome.getCurrentRevision( chapter.getId( ) );
-            String chapterTitle = extractTitle( chapterRevision, chapter.getCode( ) );
+            if ( child.getType( ) == WikiItemType.CHAPTER )
+            {
+                Revision chapterRevision = RevisionHome.getCurrentRevision( child.getId( ) );
+                String chapterTitle = extractTitle( chapterRevision, child.getCode( ) );
 
-            sb.append( "### " ).append( chapterTitle ).append( "\n" );
+                sb.append( "#".repeat( Math.min( depth, 6 ) ) ).append( " " ).append( chapterTitle ).append( "\n" );
+                appendChaptersRecursive( sb, child.getId( ), depth + 1 );
+                sb.append( "\n" );
+            }
+            else if ( child.getType( ) == WikiItemType.PAGE )
+            {
+                Revision pageRevision = RevisionHome.getCurrentRevision( child.getId( ) );
+                String pageTitle = extractTitle( pageRevision, child.getCode( ) );
+                String pageDesc = ( pageRevision != null && pageRevision.getDescription( ) != null ) ? pageRevision.getDescription( ) : "";
 
-            List<AbstractWikiItem> pages = WikiItemHome.getWikiItemsByParentAndType( chapter.getId( ), WikiItemType.PAGE );
-            appendPages( sb, pages );
-            sb.append( "\n" );
+                addSource( child, pageTitle );
+
+                sb.append( "- **" ).append( pageTitle ).append( "** (`" ).append( child.getCode( ) ).append( "`)" );
+                if ( !pageDesc.isEmpty( ) )
+                {
+                    sb.append( ": " ).append( pageDesc );
+                }
+                sb.append( "\n" );
+            }
         }
     }
 
-    /**
-     * Appends the formatted pages list to the StringBuilder.
-     *
-     * @param sb
-     *            the StringBuilder to append to
-     * @param pages
-     *            the list of page items
-     */
-    private void appendPages( StringBuilder sb, List<AbstractWikiItem> pages )
-    {
-        if ( pages.isEmpty( ) )
-        {
-            sb.append( MSG_NO_PAGES );
-            return;
-        }
-
-        for ( AbstractWikiItem page : pages )
-        {
-            if ( !WikiAccessControlService.canView( _user, page ) )
-            {
-                continue;
-            }
-
-            Revision pageRevision = RevisionHome.getCurrentRevision( page.getId( ) );
-            String pageTitle = extractTitle( pageRevision, page.getCode( ) );
-            String pageDesc = ( pageRevision != null && pageRevision.getDescription( ) != null ) ? pageRevision.getDescription( ) : "";
-
-            addSource( page, pageTitle );
-
-            sb.append( "- **" ).append( pageTitle ).append( "** (`" ).append( page.getCode( ) ).append( "`)" );
-            if ( !pageDesc.isEmpty( ) )
-            {
-                sb.append( ": " ).append( pageDesc );
-            }
-            sb.append( "\n" );
-        }
-    }
 }

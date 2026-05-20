@@ -187,27 +187,7 @@ public class EmbeddingService
             indexBookItem( book );
             totalItems++;
 
-            List<AbstractWikiItem> children = WikiItemService.getItemsByParent( book.getId( ) );
-            for ( AbstractWikiItem child : children )
-            {
-                if ( child instanceof Chapter )
-                {
-                    List<AbstractWikiItem> pages = WikiItemService.getItemsByParent( child.getId( ) );
-                    for ( AbstractWikiItem page : pages )
-                    {
-                        if ( page instanceof Page )
-                        {
-                            indexPageItem( (Page) page );
-                            totalItems++;
-                        }
-                    }
-                }
-                else if ( child instanceof Page )
-                {
-                    indexPageItem( (Page) child );
-                    totalItems++;
-                }
-            }
+            totalItems += indexChildrenRecursive( book.getId( ) );
 
             AppLogService.info( LOG_INDEXED_BOOK, book.getCode( ), totalItems );
         }
@@ -215,6 +195,34 @@ public class EmbeddingService
         {
             AppLogService.error( ERROR_INDEXING_BOOK, book.getId( ), e );
         }
+    }
+
+    /**
+     * Recursively indexes all pages under a parent item, traversing nested chapters.
+     *
+     * @param parentId
+     *            The parent item ID
+     * @return The number of items indexed
+     */
+    private int indexChildrenRecursive( int parentId )
+    {
+        int count = 0;
+        List<AbstractWikiItem> children = WikiItemService.getItemsByParent( parentId );
+
+        for ( AbstractWikiItem child : children )
+        {
+            if ( child instanceof Chapter )
+            {
+                count += indexChildrenRecursive( child.getId( ) );
+            }
+            else if ( child instanceof Page )
+            {
+                indexPageItem( (Page) child );
+                count++;
+            }
+        }
+
+        return count;
     }
 
     /**
@@ -750,6 +758,123 @@ public class EmbeddingService
                     processReindexAll( );
                 }
             }.start( );
+        }
+    }
+
+    /**
+     * Triggers an asynchronous reindexation of a single space and all its descendant items.
+     *
+     * @param spaceCode
+     *            The code of the space to reindex
+     */
+    public void reindexSpace( String spaceCode )
+    {
+        if ( _indexingStatus.getIsRunning( ).compareAndSet( false, true ) )
+        {
+            new Thread( ( ) -> processReindexSpace( spaceCode ) ).start( );
+        }
+    }
+
+    /**
+     * Processes the reindexation of a single space: removes existing documents then re-indexes the space,
+     * its books, and all pages within the space hierarchy.
+     *
+     * @param spaceCode
+     *            The code of the space to reindex
+     */
+    private void processReindexSpace( String spaceCode )
+    {
+        try
+        {
+            _indexingStatus.reset( );
+            _indexingStatus.getSbLogs( ).append( "Starting reindexation of space: " ).append( spaceCode ).append( NEWLINE );
+
+            AbstractWikiItem item = WikiItemService.findByCode( spaceCode );
+            if ( item == null || !( item instanceof Space ) )
+            {
+                _indexingStatus.getSbLogs( ).append( "Space not found: " ).append( spaceCode ).append( NEWLINE );
+                return;
+            }
+
+            Space space = (Space) item;
+
+            _indexingStatus.getSbLogs( ).append( "Removing existing documents for space..." ).append( NEWLINE );
+            removeSpace( space.getId( ) );
+
+            _elasticsearchService.createIndexIfNotExists( );
+
+            List<AbstractWikiItem> allBooks = new ArrayList<>( );
+            List<AbstractWikiItem> allPages = new ArrayList<>( );
+            collectDescendants( space.getId( ), allBooks, allPages );
+
+            int totalItems = 1 + allBooks.size( ) + allPages.size( );
+            _indexingStatus.setNbTotalObj( totalItems );
+            _indexingStatus.getSbLogs( ).append( "Found " ).append( allBooks.size( ) ).append( " books, " )
+                    .append( allPages.size( ) ).append( " pages" ).append( NEWLINE );
+
+            int currentItem = 0;
+
+            indexSpaceItem( space );
+            currentItem++;
+            _indexingStatus.setCurrentNbIndexedObj( currentItem );
+
+            for ( AbstractWikiItem book : allBooks )
+            {
+                _indexingStatus.getSbLogs( ).append( LOG_INDEXING_BOOK ).append( book.getCode( ) ).append( NEWLINE );
+                indexBookItem( (Book) book );
+                currentItem++;
+                _indexingStatus.setCurrentNbIndexedObj( currentItem );
+            }
+
+            for ( AbstractWikiItem page : allPages )
+            {
+                indexPageItem( (Page) page );
+                currentItem++;
+                _indexingStatus.setCurrentNbIndexedObj( currentItem );
+            }
+
+            _indexingStatus.getSbLogs( ).append( "Space reindexation completed successfully" ).append( NEWLINE );
+        }
+        catch( Exception e )
+        {
+            _indexingStatus.getSbLogs( ).append( "Error during space reindexation: " ).append( e.getMessage( ) ).append( NEWLINE );
+            AppLogService.error( "Error during space reindexation: " + spaceCode, e );
+        }
+        finally
+        {
+            _indexingStatus.getIsRunning( ).set( false );
+        }
+    }
+
+    /**
+     * Recursively collects all Book and Page descendants under a parent item.
+     *
+     * @param parentId
+     *            The parent item ID
+     * @param books
+     *            The list to accumulate books into
+     * @param pages
+     *            The list to accumulate pages into
+     */
+    private void collectDescendants( int parentId, List<AbstractWikiItem> books, List<AbstractWikiItem> pages )
+    {
+        List<AbstractWikiItem> children = WikiItemService.getItemsByParent( parentId );
+
+        for ( AbstractWikiItem child : children )
+        {
+            if ( child instanceof Book )
+            {
+                books.add( child );
+                collectDescendants( child.getId( ), books, pages );
+            }
+            else if ( child instanceof Page )
+            {
+                pages.add( child );
+            }
+            else
+            {
+                collectDescendants( child.getId( ), books, pages );
+            }
         }
     }
 

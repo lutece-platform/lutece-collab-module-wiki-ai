@@ -340,7 +340,7 @@ public class AiFeatureRest extends AbstractRestEndpoint
             return null;
         }
 
-        if ( !WikiAccessControlService.canCreateBook( user ) )
+        if ( !WikiAccessControlService.canUseAiFeatures( user ) )
         {
             return null;
         }

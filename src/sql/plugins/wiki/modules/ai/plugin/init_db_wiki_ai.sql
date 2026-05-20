@@ -23,6 +23,12 @@ DELETE FROM core_user_right WHERE id_right = 'WIKI_AI_FEATURES';
 INSERT INTO core_user_right (id_right, id_user) VALUES ('WIKI_AI_FEATURES', 1);
 
 --
+-- Data for table core_role
+--
+DELETE FROM core_role WHERE role = 'wiki_ai_features';
+INSERT INTO core_role (role, role_description, workgroup_key) VALUES ('wiki_ai_features', 'Wiki AI Features User (can use AI features in editor)', '');
+
+--
 -- Data for table wiki_ai_feature
 --
 DELETE FROM wiki_ai_feature;

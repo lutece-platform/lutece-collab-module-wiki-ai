@@ -33,13 +33,20 @@
  */
 package fr.paris.lutece.plugins.wiki.modules.ai.web;
 
+import java.util.List;
+
+import jakarta.enterprise.context.RequestScoped;
+import jakarta.inject.Inject;
+import jakarta.inject.Named;
+import jakarta.servlet.http.HttpServletRequest;
+
+import fr.paris.lutece.plugins.wiki.business.item.AbstractWikiItem;
+import fr.paris.lutece.plugins.wiki.business.item.WikiItemType;
+import fr.paris.lutece.plugins.wiki.service.WikiItemService;
 import fr.paris.lutece.portal.util.mvc.admin.MVCAdminJspBean;
 import fr.paris.lutece.portal.util.mvc.admin.annotations.Controller;
 import fr.paris.lutece.portal.util.mvc.commons.annotations.View;
-
-import jakarta.enterprise.context.RequestScoped;
-import jakarta.inject.Named;
-import jakarta.servlet.http.HttpServletRequest;
+import fr.paris.lutece.portal.web.cdi.mvc.Models;
 
 /**
  * Wiki AI Administration JSP Bean for managing Elasticsearch indexation. Displays the indexation management page. All indexation operations are handled via
@@ -54,8 +61,12 @@ public class WikiAIAdminJspBean extends MVCAdminJspBean
 
     private static final String TEMPLATE_MANAGE_INDEXATION = "/admin/plugins/wiki/modules/ai/manage_indexation.html";
     private static final String PROPERTY_PAGE_TITLE = "module.wiki.ai.adminFeature.manageIndexation.pageTitle";
+    private static final String MARK_SPACE_LIST = "space_list";
 
     private static final String VIEW_HOME = "home";
+
+    @Inject
+    private Models _models;
 
     /**
      * Displays the indexation management page.
@@ -67,6 +78,8 @@ public class WikiAIAdminJspBean extends MVCAdminJspBean
     @View( value = VIEW_HOME, defaultView = true )
     public String getManageIndexation( HttpServletRequest request )
     {
-        return getPage( PROPERTY_PAGE_TITLE, TEMPLATE_MANAGE_INDEXATION );
+        List<AbstractWikiItem> spaces = WikiItemService.getPublishedItemsByType( WikiItemType.SPACE );
+        _models.put( MARK_SPACE_LIST, spaces );
+        return getPage( PROPERTY_PAGE_TITLE, TEMPLATE_MANAGE_INDEXATION, _models );
     }
 }

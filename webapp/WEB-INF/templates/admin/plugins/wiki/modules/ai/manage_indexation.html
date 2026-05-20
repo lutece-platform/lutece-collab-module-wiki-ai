@@ -34,14 +34,30 @@
             </div>
           </td>
           <td>
-            <@button title='#i18n{module.wiki.ai.adminFeature.buttonFullIndexation}'
-                     buttonIcon='refresh'
-                     color='primary'
-                     params='data-indexId="wiki" data-action="indexFull"' />
-            <@button title='#i18n{module.wiki.ai.adminFeature.buttonClearIndex}'
-                     buttonIcon='trash'
-                     color='danger'
-                     params='data-indexId="wiki" data-action="indexClear"' />
+            <div class="d-flex gap-2 align-items-center flex-wrap">
+              <@button title='#i18n{module.wiki.ai.adminFeature.buttonFullIndexation}'
+                       buttonIcon='refresh'
+                       color='primary'
+                       size='sm'
+                       params='data-indexId="wiki" data-action="indexFull"' />
+              <div class="input-group input-group-sm" style="width:auto;">
+                <select id="space-select" class="form-select form-select-sm">
+                  <#list space_list as space>
+                    <option value="${space.code!}">${space.code!}</option>
+                  </#list>
+                </select>
+                <@button title='#i18n{module.wiki.ai.adminFeature.buttonIndexSpace}'
+                         buttonIcon='refresh'
+                         color='info'
+                         size='sm'
+                         params='data-indexId="wiki" data-action="indexSpace"' />
+              </div>
+              <@button title='#i18n{module.wiki.ai.adminFeature.buttonClearIndex}'
+                       buttonIcon='trash'
+                       color='danger'
+                       size='sm'
+                       params='data-indexId="wiki" data-action="indexClear"' />
+            </div>
           </td>
         </tr>
       </tbody>
@@ -97,7 +113,15 @@
 
     async function runIndex(action) {
         try {
-            const endpoint = action === 'indexFull' ? 'full' : 'clear';
+            let endpoint;
+            if (action === 'indexFull') {
+                endpoint = 'full';
+            } else if (action === 'indexSpace') {
+                const spaceCode = document.getElementById('space-select').value;
+                endpoint = 'space/' + encodeURIComponent(spaceCode);
+            } else {
+                endpoint = 'clear';
+            }
             isIndexing = true;
 
             document.getElementById("wiki-index-stats").style.display = 'none';
