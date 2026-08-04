@@ -204,7 +204,8 @@ public class WikiAIEventListener implements EventRessourceListener
     }
 
     /**
-     * Removes a wiki item and its children from the index.
+     * Removes a wiki item from the index. Descendants are covered by the deletion event fired for
+     * each of them, since they are already gone from the database by the time this runs.
      *
      * @param strIdResource
      *            the item ID as string
@@ -213,19 +214,10 @@ public class WikiAIEventListener implements EventRessourceListener
      */
     private void removeWikiItem( String strIdResource, String strResourceType )
     {
-        int nId = Integer.parseInt( strIdResource );
-        String documentId = strResourceType + DOCUMENT_ID_SEPARATOR + nId;
-
         WikiAIIndexerAction action = new WikiAIIndexerAction( );
-        action.setIdDocument( documentId );
+        action.setIdDocument( strResourceType + DOCUMENT_ID_SEPARATOR + Integer.parseInt( strIdResource ) );
         action.setIdTask( WikiAIIndexerAction.TASK_DELETE );
         WikiAIIndexerActionHome.create( action, WikiAIPlugin.getPlugin( ) );
-
-        List<AbstractWikiItem> children = WikiItemService.getItemsByParent( nId );
-        for ( AbstractWikiItem child : children )
-        {
-            removeWikiItem( String.valueOf( child.getId( ) ), child.getResourceType( ) );
-        }
     }
 
     /**
