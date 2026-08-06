@@ -77,6 +77,7 @@ public class ElasticsearchService implements ShutdownService
 
     private static final String LOG_ELASTICSEARCH_URL = "Elasticsearch URL: {}";
     private static final String LOG_CREATED_INDEX = "Created Elasticsearch index: {}";
+    private static final String LOG_CLIENT_REBUILT = "Elasticsearch client rebuilt after its I/O reactor died";
     private static final String LOG_CLIENT_CLOSED = "Elasticsearch clients closed successfully";
     private static final String LOG_ERROR_CLOSING = "Error closing Elasticsearch clients: {}";
     private static final String ERROR_CREATING_INDEX = "Error creating Elasticsearch index: {}";
@@ -89,30 +90,42 @@ public class ElasticsearchService implements ShutdownService
     private static final String MAPPING_PROPERTY_TEXT = "text";
     private static final String MAPPING_PROPERTY_VECTOR = "vector";
 
-    private RestClient _restClient;
-    private RestClientTransport _transport;
-    private ElasticsearchClient _client;
+    private String _strProtocol;
+    private String _strHost;
+    private int _nPort;
+    private String _strUsername;
+    private String _strPassword;
+    private volatile RestClient _restClient;
+    private volatile RestClientTransport _transport;
+    private volatile ElasticsearchClient _client;
     private String _indexName;
+    private volatile boolean _bIndexReady;
 
     /**
-     * Initializes the Elasticsearch connections after CDI construction.
+     * Initializes the Elasticsearch clients after CDI construction, without talking to the server:
+     * anything that can fail is deferred to the first operation.
      */
     @PostConstruct
     public void init( )
     {
-        String esHost = AppPropertiesService.getProperty( PROPERTY_ES_HOST );
-        int esPort = AppPropertiesService.getPropertyInt( PROPERTY_ES_PORT, DEFAULT_ES_PORT );
-        String esProtocol = AppPropertiesService.getProperty( PROPERTY_ES_PROTOCOL );
-        String esUsername = AppPropertiesService.getProperty( PROPERTY_ES_USERNAME );
-        String esPassword = AppPropertiesService.getProperty( PROPERTY_ES_PASSWORD );
-        String indexPrefix = AppPropertiesService.getProperty( PROPERTY_ELASTICSEARCH_INDEX_PREFIX, DEFAULT_INDEX_PREFIX );
+        _strHost = AppPropertiesService.getProperty( PROPERTY_ES_HOST );
+        _nPort = AppPropertiesService.getPropertyInt( PROPERTY_ES_PORT, DEFAULT_ES_PORT );
+        _strProtocol = AppPropertiesService.getProperty( PROPERTY_ES_PROTOCOL );
+        _strUsername = AppPropertiesService.getProperty( PROPERTY_ES_USERNAME );
+        _strPassword = AppPropertiesService.getProperty( PROPERTY_ES_PASSWORD );
+        _indexName = AppPropertiesService.getProperty( PROPERTY_ELASTICSEARCH_INDEX_PREFIX, DEFAULT_INDEX_PREFIX ) + INDEX_SUFFIX;
 
-        _restClient = createRestClient( esProtocol, esHost, esPort, esUsername, esPassword );
+        buildClients( );
+    }
+
+    /**
+     * Builds the rest client, the transport and the typed client bound to it.
+     */
+    private void buildClients( )
+    {
+        _restClient = createRestClient( _strProtocol, _strHost, _nPort, _strUsername, _strPassword );
         _transport = new RestClientTransport( _restClient, new JacksonJsonpMapper( ) );
         _client = new ElasticsearchClient( _transport );
-        _indexName = indexPrefix + INDEX_SUFFIX;
-
-        createIndexIfNotExists( );
     }
 
     /**
@@ -154,6 +167,7 @@ public class ElasticsearchService implements ShutdownService
      */
     public EmbeddingStore<TextSegment> createEmbeddingStore( )
     {
+        ensureUsable( );
         ElasticsearchConfigurationKnn configuration = ElasticsearchConfigurationKnn.builder( ).numCandidates( NUM_CANDIDATES ).build( );
 
         return new ElasticsearchEmbeddingStore( configuration, _restClient, _indexName );
@@ -166,6 +180,7 @@ public class ElasticsearchService implements ShutdownService
      */
     public ElasticsearchClient getClient( )
     {
+        ensureUsable( );
         return _client;
     }
 
@@ -180,7 +195,67 @@ public class ElasticsearchService implements ShutdownService
     }
 
     /**
-     * Creates the Elasticsearch index if it does not exist.
+     * Puts the service in a usable state before an operation: a live client, and the index created
+     * once. Failing here stays a per-operation failure the caller can retry on the next run.
+     */
+    private void ensureUsable( )
+    {
+        ensureClientAlive( );
+
+        if ( _bIndexReady )
+        {
+            return;
+        }
+
+        synchronized( this )
+        {
+            if ( !_bIndexReady )
+            {
+                createIndexIfNotExists( );
+            }
+        }
+    }
+
+    /**
+     * Rebuilds the clients when the underlying I/O reactor died: hammering an unreachable server can
+     * kill it, and a dead reactor cancels every later request forever, even once the server is back.
+     */
+    private void ensureClientAlive( )
+    {
+        if ( _restClient.isRunning( ) )
+        {
+            return;
+        }
+
+        synchronized( this )
+        {
+            if ( !_restClient.isRunning( ) )
+            {
+                closeClients( );
+                buildClients( );
+                AppLogService.info( LOG_CLIENT_REBUILT );
+            }
+        }
+    }
+
+    /**
+     * Closes the clients, ignoring failures: they are only closed when already dead.
+     */
+    private void closeClients( )
+    {
+        try
+        {
+            _transport.close( );
+            _restClient.close( );
+        }
+        catch( IOException e )
+        {
+            AppLogService.debug( LOG_ERROR_CLOSING, e.getMessage( ) );
+        }
+    }
+
+    /**
+     * Creates the Elasticsearch index if it does not exist. Throws on failure.
      */
     public void createIndexIfNotExists( )
     {
@@ -196,6 +271,8 @@ public class ElasticsearchService implements ShutdownService
 
                 AppLogService.info( LOG_CREATED_INDEX, _indexName );
             }
+
+            _bIndexReady = true;
         }
         catch( ElasticsearchException | IOException e )
         {
