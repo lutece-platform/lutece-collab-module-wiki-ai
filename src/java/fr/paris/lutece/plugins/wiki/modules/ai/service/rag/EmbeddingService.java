@@ -40,7 +40,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+import co.elastic.clients.elasticsearch._types.Conflicts;
 import co.elastic.clients.elasticsearch._types.ElasticsearchException;
+import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.elasticsearch.core.CountResponse;
 import co.elastic.clients.elasticsearch.core.DeleteByQueryResponse;
 import dev.langchain4j.data.document.DefaultDocument;
@@ -71,6 +73,7 @@ public class EmbeddingService
 {
     private static final int CHUNK_SIZE = 1000;
     private static final int CHUNK_OVERLAP = 200;
+    private static final long DELETE_RETRY_DELAY_MS = 1100L;
 
     private static final String FIELD_ID = "id";
     private static final String FIELD_TYPE = "type";
@@ -109,10 +112,8 @@ public class EmbeddingService
 
     private static final String ERROR_INDEXING_BOOK = "Error indexing book ";
     private static final String ERROR_INDEXING_SPACE = "Error indexing space ";
-    private static final String ERROR_REMOVING_BOOK = "Error removing book ";
-    private static final String ERROR_REMOVING_PAGE = "Error removing page ";
-    private static final String ERROR_REMOVING_SPACE = "Error removing space ";
-    private static final String ERROR_CLEARING_INDEX = "Error clearing Elasticsearch index";
+    private static final String ERROR_INDEXING_PAGE = "Error indexing page ";
+    private static final String ERROR_DELETE_BY_QUERY = "Delete by query failed";
     private static final String ERROR_DURING_REINDEXING = "Error during reindexing";
     private static final String ERROR_CLEARING_INDEX_MSG = "Error clearing index: ";
     private static final String ERROR_DURING_REINDEXING_MSG = "Error during reindexing: ";
@@ -238,7 +239,8 @@ public class EmbeddingService
     }
 
     /**
-     * Indexes a single item (Book or Page)
+     * Indexes a single item (Space, Book or Page). Throws on failure, so the daemon keeps the
+     * action queued and replays it on its next run.
      *
      * @param itemId
      *            The item ID
@@ -252,6 +254,17 @@ public class EmbeddingService
             return;
         }
 
+        dispatchIndex( item );
+    }
+
+    /**
+     * Routes an item to the indexing method of its type.
+     *
+     * @param item
+     *            The item to index
+     */
+    private void dispatchIndex( AbstractWikiItem item )
+    {
         if ( item instanceof Space )
         {
             indexSpaceItem( (Space) item );
@@ -263,6 +276,26 @@ public class EmbeddingService
         else if ( item instanceof Page )
         {
             indexPageItem( (Page) item );
+        }
+    }
+
+    /**
+     * Indexes one item of a reindexation run, logging and moving on when it fails: one broken item
+     * must not stop the whole run.
+     *
+     * @param item
+     *            The item to index
+     */
+    private void indexItemSafely( AbstractWikiItem item )
+    {
+        try
+        {
+            dispatchIndex( item );
+        }
+        catch( Exception e )
+        {
+            _indexingStatus.getSbLogs( ).append( "Failed on " ).append( item.getCode( ) ).append( ": " ).append( e.getMessage( ) ).append( NEWLINE );
+            AppLogService.error( "Reindexation failed on " + item.getCode( ), e );
         }
     }
 
@@ -352,7 +385,7 @@ public class EmbeddingService
         }
         catch( Exception e )
         {
-            AppLogService.error( "Error indexing book " + book.getId( ), e );
+            throw new RuntimeException( ERROR_INDEXING_BOOK + book.getId( ), e );
         }
     }
 
@@ -424,7 +457,7 @@ public class EmbeddingService
         }
         catch( Exception e )
         {
-            AppLogService.error( ERROR_INDEXING_SPACE + space.getId( ), e );
+            throw new RuntimeException( ERROR_INDEXING_SPACE + space.getId( ), e );
         }
     }
 
@@ -502,7 +535,7 @@ public class EmbeddingService
         }
         catch( Exception e )
         {
-            AppLogService.error( "Error indexing page " + page.getId( ), e );
+            throw new RuntimeException( ERROR_INDEXING_PAGE + page.getId( ), e );
         }
     }
 
@@ -570,71 +603,81 @@ public class EmbeddingService
     }
 
     /**
-     * Removes a book and all its content from the index using Elasticsearch query
+     * Runs a delete by query, letting version conflicts proceed and retrying once when some remain.
+     * A conflict only means a document changed between the search and the delete, which happens when
+     * several actions of the same item are replayed in a burst, inside the index refresh window.
+     * Failures are thrown, so a queued action stays queued instead of being dropped as done.
+     *
+     * @param query
+     *            the query selecting the documents to delete
+     * @return how many documents were deleted
+     */
+    private long deleteByQuery( Query query )
+    {
+        try
+        {
+            ElasticsearchService esService = ElasticsearchService.getInstance( );
+            String indexName = esService.getIndexName( );
+
+            DeleteByQueryResponse response = esService.getClient( )
+                    .deleteByQuery( delete -> delete.index( indexName ).conflicts( Conflicts.Proceed ).query( query ) );
+
+            if ( response.versionConflicts( ) != null && response.versionConflicts( ) > 0 )
+            {
+                Thread.sleep( DELETE_RETRY_DELAY_MS );
+                response = esService.getClient( ).deleteByQuery( delete -> delete.index( indexName ).conflicts( Conflicts.Proceed ).query( query ) );
+            }
+
+            return response.deleted( ) != null ? response.deleted( ) : 0L;
+        }
+        catch( InterruptedException e )
+        {
+            Thread.currentThread( ).interrupt( );
+            throw new RuntimeException( ERROR_DELETE_BY_QUERY, e );
+        }
+        catch( ElasticsearchException | IOException e )
+        {
+            throw new RuntimeException( ERROR_DELETE_BY_QUERY, e );
+        }
+    }
+
+    /**
+     * Removes a book and all its content from the index. Throws on failure, so the daemon keeps the
+     * action queued and replays it once Elasticsearch answers again.
      *
      * @param bookId
      *            The ID of the book to remove
      */
     public void removeBook( int bookId )
     {
-        try
-        {
-            ElasticsearchService esService = ElasticsearchService.getInstance( );
-            String indexName = esService.getIndexName( );
-
-            DeleteByQueryResponse response = esService.getClient( ).deleteByQuery(
-                    delete -> delete.index( indexName ).query( q -> q.term( t -> t.field( "metadata.book_id.keyword" ).value( String.valueOf( bookId ) ) ) ) );
-
-            long deletedCount = response.deleted( );
-            AppLogService.info( LOG_REMOVED_BOOK + bookId + SPACE + deletedCount + " items" );
-        }
-        catch( ElasticsearchException | IOException e )
-        {
-            AppLogService.error( ERROR_REMOVING_BOOK + bookId, e );
-        }
+        long deletedCount = deleteByQuery( Query.of( q -> q.term( t -> t.field( "metadata.book_id.keyword" ).value( String.valueOf( bookId ) ) ) ) );
+        AppLogService.info( LOG_REMOVED_BOOK + bookId + SPACE + deletedCount + " items" );
     }
 
     /**
-     * Removes a page from the index using Elasticsearch query
+     * Removes a page from the index. Throws on failure, so the daemon keeps the action queued and
+     * replays it once Elasticsearch answers again.
      *
      * @param pageId
      *            The ID of the page to remove
      */
     public void removePage( int pageId )
     {
-        try
-        {
-            ElasticsearchService esService = ElasticsearchService.getInstance( );
-            String indexName = esService.getIndexName( );
-
-            DeleteByQueryResponse response = esService.getClient( ).deleteByQuery(
-                    delete -> delete.index( indexName ).query( q -> q.term( t -> t.field( "metadata.page_id.keyword" ).value( String.valueOf( pageId ) ) ) ) );
-
-            AppLogService.info( LOG_REMOVED_PAGE + pageId + SPACE + response.deleted( ) + " items" );
-        }
-        catch( ElasticsearchException | IOException e )
-        {
-            AppLogService.error( ERROR_REMOVING_PAGE + pageId, e );
-        }
+        long deletedCount = deleteByQuery( Query.of( q -> q.term( t -> t.field( "metadata.page_id.keyword" ).value( String.valueOf( pageId ) ) ) ) );
+        AppLogService.info( LOG_REMOVED_PAGE + pageId + SPACE + deletedCount + " items" );
     }
 
+    /**
+     * Removes a space and all its content from the index. Throws on failure, so the daemon keeps the
+     * action queued and replays it once Elasticsearch answers again.
+     *
+     * @param spaceId
+     *            The ID of the space to remove
+     */
     public void removeSpace( int spaceId )
     {
-        try
-        {
-            ElasticsearchService esService = ElasticsearchService.getInstance( );
-            String indexName = esService.getIndexName( );
-
-            DeleteByQueryResponse response = esService.getClient( ).deleteByQuery( delete -> delete.index( indexName )
-                    .query( q -> q.term( t -> t.field( "metadata.space_id.keyword" ).value( String.valueOf( spaceId ) ) ) ) );
-
-            long deletedCount = response.deleted( );
-            AppLogService.info( LOG_REMOVED_SPACE + spaceId + SPACE + deletedCount + " items" );
-        }
-        catch( ElasticsearchException | IOException e )
-        {
-            AppLogService.error( ERROR_REMOVING_SPACE + spaceId, e );
-        }
+        long deletedCount = deleteByQuery( Query.of( q -> q.term( t -> t.field( "metadata.space_id.keyword" ).value( String.valueOf( spaceId ) ) ) ) );
+        AppLogService.info( LOG_REMOVED_SPACE + spaceId + SPACE + deletedCount + " items" );
     }
 
     /**
@@ -645,22 +688,9 @@ public class EmbeddingService
      */
     private void removeAllBookChunks( int bookId )
     {
-        try
-        {
-            ElasticsearchService esService = ElasticsearchService.getInstance( );
-            String indexName = esService.getIndexName( );
-
-            DeleteByQueryResponse response = esService.getClient( )
-                    .deleteByQuery( delete -> delete.index( indexName )
-                            .query( q -> q.bool( b -> b.must( m -> m.term( t -> t.field( "metadata.type.keyword" ).value( Book.RESOURCE_TYPE ) ) )
-                                    .must( m -> m.term( t -> t.field( "metadata.book_id.keyword" ).value( String.valueOf( bookId ) ) ) ) ) ) );
-
-            AppLogService.debug( "Removed " + response.deleted( ) + " chunks for book " + bookId );
-        }
-        catch( ElasticsearchException | IOException e )
-        {
-            AppLogService.error( "Error removing book chunks " + bookId, e );
-        }
+        long deletedCount = deleteByQuery( Query.of( q -> q.bool( b -> b.must( m -> m.term( t -> t.field( "metadata.type.keyword" ).value( Book.RESOURCE_TYPE ) ) )
+                .must( m -> m.term( t -> t.field( "metadata.book_id.keyword" ).value( String.valueOf( bookId ) ) ) ) ) ) );
+        AppLogService.debug( "Removed " + deletedCount + " chunks for book " + bookId );
     }
 
     /**
@@ -671,59 +701,33 @@ public class EmbeddingService
      */
     private void removeAllPageChunks( int pageId )
     {
-        try
-        {
-            ElasticsearchService esService = ElasticsearchService.getInstance( );
-            String indexName = esService.getIndexName( );
-
-            DeleteByQueryResponse response = esService.getClient( )
-                    .deleteByQuery( delete -> delete.index( indexName )
-                            .query( q -> q.bool( b -> b.must( m -> m.term( t -> t.field( "metadata.type.keyword" ).value( Page.RESOURCE_TYPE ) ) )
-                                    .must( m -> m.term( t -> t.field( "metadata.page_id.keyword" ).value( String.valueOf( pageId ) ) ) ) ) ) );
-
-            AppLogService.debug( "Removed " + response.deleted( ) + " chunks for page " + pageId );
-        }
-        catch( ElasticsearchException | IOException e )
-        {
-            AppLogService.error( "Error removing page chunks " + pageId, e );
-        }
-    }
-
-    private void removeAllSpaceChunks( int spaceId )
-    {
-        try
-        {
-            ElasticsearchService esService = ElasticsearchService.getInstance( );
-            String indexName = esService.getIndexName( );
-
-            DeleteByQueryResponse response = esService.getClient( )
-                    .deleteByQuery( delete -> delete.index( indexName )
-                            .query( q -> q.bool( b -> b.must( m -> m.term( t -> t.field( "metadata.type.keyword" ).value( Space.RESOURCE_TYPE ) ) )
-                                    .must( m -> m.term( t -> t.field( "metadata.space_id.keyword" ).value( String.valueOf( spaceId ) ) ) ) ) ) );
-
-            AppLogService.debug( "Removed " + response.deleted( ) + " chunks for space " + spaceId );
-        }
-        catch( ElasticsearchException | IOException e )
-        {
-            AppLogService.error( "Error removing space chunks " + spaceId, e );
-        }
+        long deletedCount = deleteByQuery( Query.of( q -> q.bool( b -> b.must( m -> m.term( t -> t.field( "metadata.type.keyword" ).value( Page.RESOURCE_TYPE ) ) )
+                .must( m -> m.term( t -> t.field( "metadata.page_id.keyword" ).value( String.valueOf( pageId ) ) ) ) ) ) );
+        AppLogService.debug( "Removed " + deletedCount + " chunks for page " + pageId );
     }
 
     /**
-     * Clears the entire Elasticsearch index
+     * Removes all chunks for a space from the index
+     *
+     * @param spaceId
+     *            The space ID
+     */
+    private void removeAllSpaceChunks( int spaceId )
+    {
+        long deletedCount = deleteByQuery( Query.of( q -> q.bool( b -> b.must( m -> m.term( t -> t.field( "metadata.type.keyword" ).value( Space.RESOURCE_TYPE ) ) )
+                .must( m -> m.term( t -> t.field( "metadata.space_id.keyword" ).value( String.valueOf( spaceId ) ) ) ) ) ) );
+        AppLogService.debug( "Removed " + deletedCount + " chunks for space " + spaceId );
+    }
+
+    /**
+     * Clears the entire Elasticsearch index. Throws on failure, so a reindexation against an
+     * unreachable server aborts at once instead of failing item by item.
      */
     public void clearIndex( )
     {
-        try
-        {
-            EmbeddingStore<TextSegment> embeddingStore = ElasticsearchService.getInstance( ).createEmbeddingStore( );
-            embeddingStore.removeAll( );
-            AppLogService.info( LOG_INDEX_CLEARED );
-        }
-        catch( Exception e )
-        {
-            AppLogService.error( ERROR_CLEARING_INDEX, e );
-        }
+        EmbeddingStore<TextSegment> embeddingStore = ElasticsearchService.getInstance( ).createEmbeddingStore( );
+        embeddingStore.removeAll( );
+        AppLogService.info( LOG_INDEX_CLEARED );
     }
 
     /**
@@ -835,21 +839,21 @@ public class EmbeddingService
 
             int currentItem = 0;
 
-            indexSpaceItem( space );
+            indexItemSafely( space );
             currentItem++;
             _indexingStatus.setCurrentNbIndexedObj( currentItem );
 
             for ( AbstractWikiItem book : allBooks )
             {
                 _indexingStatus.getSbLogs( ).append( LOG_INDEXING_BOOK ).append( book.getCode( ) ).append( NEWLINE );
-                indexBookItem( (Book) book );
+                indexItemSafely( book );
                 currentItem++;
                 _indexingStatus.setCurrentNbIndexedObj( currentItem );
             }
 
             for ( AbstractWikiItem page : allPages )
             {
-                indexPageItem( (Page) page );
+                indexItemSafely( page );
                 currentItem++;
                 _indexingStatus.setCurrentNbIndexedObj( currentItem );
             }
@@ -969,7 +973,7 @@ public class EmbeddingService
                 {
                     _indexingStatus.getSbLogs( ).append( "Indexing space: " ).append( space.getCode( ) ).append( NEWLINE );
 
-                    indexSpaceItem( (Space) space );
+                    indexItemSafely( space );
                     currentItem++;
                     _indexingStatus.setCurrentNbIndexedObj( currentItem );
                 }
@@ -981,7 +985,7 @@ public class EmbeddingService
                 {
                     _indexingStatus.getSbLogs( ).append( LOG_INDEXING_BOOK ).append( book.getCode( ) ).append( NEWLINE );
 
-                    indexBookItem( (Book) book );
+                    indexItemSafely( book );
                     currentItem++;
                     _indexingStatus.setCurrentNbIndexedObj( currentItem );
                 }
@@ -991,7 +995,7 @@ public class EmbeddingService
             {
                 if ( page instanceof Page )
                 {
-                    indexPageItem( (Page) page );
+                    indexItemSafely( page );
                     currentItem++;
                     _indexingStatus.setCurrentNbIndexedObj( currentItem );
                 }
