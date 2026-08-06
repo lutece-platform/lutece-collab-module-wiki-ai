@@ -82,6 +82,7 @@ public class ElasticsearchService implements ShutdownService
 
     private static final String LOG_ELASTICSEARCH_URL = "Elasticsearch URL: ";
     private static final String LOG_CREATED_INDEX = "Created Elasticsearch index: ";
+    private static final String LOG_CLIENT_REBUILT = "Elasticsearch client rebuilt after its I/O reactor died";
     private static final String LOG_CLIENT_CLOSED = "Elasticsearch clients closed successfully";
     private static final String LOG_ERROR_CLOSING = "Error closing Elasticsearch clients: ";
     private static final String ERROR_CREATING_INDEX = "Error creating Elasticsearch index: ";
@@ -99,22 +100,31 @@ public class ElasticsearchService implements ShutdownService
         static final ElasticsearchService INSTANCE = new ElasticsearchService( );
     }
 
-    private final RestClient _restClient;
-    private final RestClientTransport _transport;
-    private final ElasticsearchClient _client;
+    private volatile RestClient _restClient;
+    private volatile RestClientTransport _transport;
+    private volatile ElasticsearchClient _client;
     private final String _indexName;
+    private volatile boolean _bIndexReady;
 
     /**
-     * Private constructor to ensure singleton pattern.
+     * Private constructor to ensure singleton pattern. Builds the clients without talking to the
+     * server: a failure here would poison the class for the whole JVM lifetime, so anything that can
+     * fail is deferred to the first operation.
      */
     private ElasticsearchService( )
+    {
+        _indexName = INDEX_PREFIX + INDEX_SUFFIX;
+        buildClients( );
+    }
+
+    /**
+     * Builds the rest client, the transport and the typed client bound to it.
+     */
+    private void buildClients( )
     {
         _restClient = createRestClient( );
         _transport = new RestClientTransport( _restClient, new JacksonJsonpMapper( ) );
         _client = new ElasticsearchClient( _transport );
-        _indexName = INDEX_PREFIX + INDEX_SUFFIX;
-
-        createIndexIfNotExists( );
     }
 
     /**
@@ -156,6 +166,7 @@ public class ElasticsearchService implements ShutdownService
      */
     public EmbeddingStore<TextSegment> createEmbeddingStore( )
     {
+        ensureUsable( );
         ElasticsearchConfigurationKnn configuration = ElasticsearchConfigurationKnn.builder( ).numCandidates( NUM_CANDIDATES ).build( );
 
         return new ElasticsearchEmbeddingStore( configuration, _restClient, _indexName );
@@ -168,7 +179,69 @@ public class ElasticsearchService implements ShutdownService
      */
     public ElasticsearchClient getClient( )
     {
+        ensureUsable( );
         return _client;
+    }
+
+    /**
+     * Puts the service in a usable state before an operation: a live client, and the index created
+     * once. Failing here stays a per-operation failure the caller can retry on the next run, never a
+     * class initialization failure freezing the service until a restart.
+     */
+    private void ensureUsable( )
+    {
+        ensureClientAlive( );
+
+        if ( _bIndexReady )
+        {
+            return;
+        }
+
+        synchronized( this )
+        {
+            if ( !_bIndexReady )
+            {
+                createIndexIfNotExists( );
+            }
+        }
+    }
+
+    /**
+     * Rebuilds the clients when the underlying I/O reactor died: hammering an unreachable server can
+     * kill it, and a dead reactor cancels every later request forever, even once the server is back.
+     */
+    private void ensureClientAlive( )
+    {
+        if ( _restClient.isRunning( ) )
+        {
+            return;
+        }
+
+        synchronized( this )
+        {
+            if ( !_restClient.isRunning( ) )
+            {
+                closeClients( );
+                buildClients( );
+                AppLogService.info( LOG_CLIENT_REBUILT );
+            }
+        }
+    }
+
+    /**
+     * Closes the clients, ignoring failures: they are only closed when already dead.
+     */
+    private void closeClients( )
+    {
+        try
+        {
+            _transport.close( );
+            _restClient.close( );
+        }
+        catch( IOException e )
+        {
+            AppLogService.debug( LOG_ERROR_CLOSING + e.getMessage( ) );
+        }
     }
 
     /**
@@ -182,7 +255,7 @@ public class ElasticsearchService implements ShutdownService
     }
 
     /**
-     * Creates the Elasticsearch index if it does not exist.
+     * Creates the Elasticsearch index if it does not exist. Throws on failure.
      */
     public final void createIndexIfNotExists( )
     {
@@ -198,6 +271,8 @@ public class ElasticsearchService implements ShutdownService
 
                 AppLogService.info( LOG_CREATED_INDEX + _indexName );
             }
+
+            _bIndexReady = true;
         }
         catch( ElasticsearchException | IOException e )
         {
