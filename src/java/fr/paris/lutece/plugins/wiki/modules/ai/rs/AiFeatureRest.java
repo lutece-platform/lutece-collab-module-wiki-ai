@@ -64,7 +64,6 @@ import fr.paris.lutece.plugins.wiki.modules.ai.service.event.WikiEventService;
 import fr.paris.lutece.plugins.wiki.modules.ai.service.event.WikiEventTypes;
 import fr.paris.lutece.plugins.wiki.modules.ai.service.rate.AiRateLimitService;
 import fr.paris.lutece.plugins.wiki.modules.ai.service.rate.RateLimitResult;
-import fr.paris.lutece.plugins.wiki.service.security.WikiAccessControlService;
 import fr.paris.lutece.portal.service.security.LuteceUser;
 import fr.paris.lutece.portal.service.security.SecurityService;
 import fr.paris.lutece.portal.service.util.AppLogService;
@@ -108,7 +107,7 @@ public class AiFeatureRest extends AbstractRestEndpoint
     @Produces( MediaType.APPLICATION_JSON )
     public Response getFeatures( @QueryParam( "type" ) String strType )
     {
-        LuteceUser user = authenticateAndAuthorize( );
+        LuteceUser user = authenticate( );
         if ( user == null )
         {
             return createUnauthorizedResponse( );
@@ -145,7 +144,7 @@ public class AiFeatureRest extends AbstractRestEndpoint
     @Produces( MediaType.APPLICATION_JSON )
     public Response getRateLimitStatus( )
     {
-        LuteceUser user = authenticateAndAuthorize( );
+        LuteceUser user = authenticate( );
         if ( user == null )
         {
             return createUnauthorizedResponse( );
@@ -175,7 +174,7 @@ public class AiFeatureRest extends AbstractRestEndpoint
     @Produces( MediaType.APPLICATION_JSON )
     public Response initStreamingFeature( Map<String, Object> request )
     {
-        LuteceUser user = authenticateAndAuthorize( );
+        LuteceUser user = authenticate( );
         if ( user == null )
         {
             return createUnauthorizedResponse( );
@@ -226,7 +225,7 @@ public class AiFeatureRest extends AbstractRestEndpoint
     @Produces( MediaType.SERVER_SENT_EVENTS )
     public void getStreamingFeatureEvents( @PathParam( "streamId" ) String streamId, @Context SseEventSink eventSink, @Context Sse sse )
     {
-        LuteceUser user = authenticateAndAuthorize( );
+        LuteceUser user = authenticate( );
         if ( user == null )
         {
             AppLogService.error( LOG_AUTH_FAILED + streamId );
@@ -321,38 +320,22 @@ public class AiFeatureRest extends AbstractRestEndpoint
     }
 
     /**
-     * Authenticates the user and checks authorization.
+     * Authenticates the user.
      *
-     * @return the authenticated user, or null if not authorized
+     * @return the authenticated user, or null when no user is signed in
      */
-    private LuteceUser authenticateAndAuthorize( )
+    private LuteceUser authenticate( )
     {
-        LuteceUser user = SecurityService.getInstance( ).getRegisteredUser( _request );
-        if ( user == null )
-        {
-            return null;
-        }
-
-        if ( !WikiAccessControlService.canUseAiFeatures( user ) )
-        {
-            return null;
-        }
-
-        return user;
+        return SecurityService.getInstance( ).getRegisteredUser( _request );
     }
 
     /**
-     * Creates an unauthorized response based on the authentication status.
+     * Creates the response returned when no user is signed in.
      *
-     * @return response with appropriate error status and message
+     * @return response with the unauthorized status and message
      */
     private Response createUnauthorizedResponse( )
     {
-        LuteceUser user = SecurityService.getInstance( ).getRegisteredUser( _request );
-        if ( user == null )
-        {
-            return createErrorResponse( Response.Status.UNAUTHORIZED, WikiAIRestConstants.ERROR_NOT_AUTHENTICATED );
-        }
-        return createErrorResponse( Response.Status.FORBIDDEN, WikiAIRestConstants.ERROR_NOT_AUTHORIZED );
+        return createErrorResponse( Response.Status.UNAUTHORIZED, WikiAIRestConstants.ERROR_NOT_AUTHENTICATED );
     }
 }
