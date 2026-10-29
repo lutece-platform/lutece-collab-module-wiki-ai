@@ -65,22 +65,22 @@
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-core</artifactId>
-            <version>1.7.1</version>
+            <version>1.21.0</version>
         </dependency>
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j</artifactId>
-            <version>1.7.1</version>
+            <version>1.21.0</version>
         </dependency>
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-elasticsearch</artifactId>
-            <version>1.7.1-beta14</version>
+            <version>1.21.0-beta31</version>
         </dependency>
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-azure-open-ai</artifactId>
-            <version>1.7.1</version>
+            <version>1.21.0</version>
         </dependency>
         <dependency>
             <groupId>fr.paris.lutece.plugins</groupId>
