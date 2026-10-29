@@ -45,6 +45,7 @@ import org.elasticsearch.client.RestClientBuilder;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.ElasticsearchException;
+import co.elastic.clients.elasticsearch._types.mapping.DenseVectorIndexOptionsType;
 import co.elastic.clients.json.jackson.JacksonJsonpMapper;
 import co.elastic.clients.transport.rest_client.RestClientTransport;
 import dev.langchain4j.data.segment.TextSegment;
@@ -85,7 +86,7 @@ public class ElasticsearchService implements ShutdownService
     private static final int NUM_CANDIDATES = 100;
     private static final int HNSW_M = 16;
     private static final int HNSW_EF_CONSTRUCTION = 100;
-    private static final String HNSW_TYPE = "hnsw";
+    private static final DenseVectorIndexOptionsType HNSW_TYPE = DenseVectorIndexOptionsType.Hnsw;
     private static final String MAPPING_PROPERTY_TEXT = "text";
     private static final String MAPPING_PROPERTY_VECTOR = "vector";
 
