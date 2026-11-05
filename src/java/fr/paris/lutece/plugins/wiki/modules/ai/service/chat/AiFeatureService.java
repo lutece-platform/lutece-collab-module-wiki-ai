@@ -33,16 +33,21 @@
  */
 package fr.paris.lutece.plugins.wiki.modules.ai.service.chat;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.SystemMessage;
+import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.model.input.PromptTemplate;
 import fr.paris.lutece.plugins.wiki.modules.ai.business.AiFeature;
 import fr.paris.lutece.plugins.wiki.modules.ai.business.AiFeatureHome;
+import fr.paris.lutece.portal.service.util.AppPropertiesService;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
@@ -56,6 +61,17 @@ public class AiFeatureService
     private static final String ERROR_FEATURE_NOT_FOUND = "Feature not found with id: ";
     private static final String ERROR_FEATURE_INACTIVE = "Feature is not active: ";
     private static final String VARIABLE_TEXT = "text";
+    private static final String PROPERTY_EDIT_SYSTEM_PROMPT = "wiki.ai.edit.systemPrompt";
+    private static final String DEFAULT_EDIT_SYSTEM_PROMPT = "You are the writing assistant of a wiki editor. The user selected a Markdown excerpt and makes a request about it. "
+            + "Answer only with Markdown: no introduction, no comment, no code fence around the whole answer. "
+            + "When the request changes the excerpt, answer with the whole new excerpt. "
+            + "When the request creates something new from the excerpt (a diagram, a table, a summary, a title...), start your answer with ADD: "
+            + "followed only by that new content, without the excerpt. "
+            + "Keep the language of the excerpt unless asked otherwise, and keep its Markdown formatting, links and images. "
+            + "When the request cannot be done on this excerpt without inventing information, answer only CANNOT: followed by one short sentence, "
+            + "in the language of the excerpt, that tells the user why.";
+    private static final String EDIT_FIRST_REQUEST = "<excerpt>\n%s\n</excerpt>\n\nInstruction: %s";
+    private static final String EDIT_NEXT_REQUEST = "Instruction: %s\n\nApply it to your last version and answer with the whole new version.";
 
     @Inject
     @Named( "wiki-ai.streamingChatModel" )
@@ -99,22 +115,91 @@ public class AiFeatureService
      */
     public void executeFeature( int nFeatureId, String strText, StreamingChatResponseHandler handler )
     {
-        Optional<AiFeature> optFeature = AiFeatureHome.findByPrimaryKey( nFeatureId );
+        _streamingChatModel.chat( buildPrompt( findActiveFeature( nFeatureId ).getPromptTemplate( ), strText ), handler );
+    }
 
-        if ( !optFeature.isPresent( ) )
+    /**
+     * Rewrites a selection with the model, as a conversation: the first step applies a feature or an instruction to the selection, each
+     * next step refines the previous answer.
+     *
+     * @param strText
+     *            the selected Markdown
+     * @param steps
+     *            the steps, the last one being the request to run
+     * @param handler
+     *            the streaming response handler
+     * @throws IllegalArgumentException
+     *             if a feature is not found
+     * @throws IllegalStateException
+     *             if a feature is not active
+     */
+    public void editSelection( String strText, List<EditStep> steps, StreamingChatResponseHandler handler )
+    {
+        List<ChatMessage> messages = new ArrayList<>( );
+        messages.add( SystemMessage.from( AppPropertiesService.getProperty( PROPERTY_EDIT_SYSTEM_PROMPT, DEFAULT_EDIT_SYSTEM_PROMPT ) ) );
+        for ( int i = 0; i < steps.size( ); i++ )
         {
-            throw new IllegalArgumentException( ERROR_FEATURE_NOT_FOUND + nFeatureId );
+            EditStep step = steps.get( i );
+            messages.add( UserMessage.from( i == 0 ? firstEditRequest( strText, step ) : nextEditRequest( step ) ) );
+            if ( step.result( ) != null )
+            {
+                messages.add( AiMessage.from( step.result( ) ) );
+            }
         }
+        _streamingChatModel.chat( messages, handler );
+    }
 
-        AiFeature feature = optFeature.get( );
+    /**
+     * Builds the request of the first step, on the selection.
+     *
+     * @param strText
+     *            the selected Markdown
+     * @param step
+     *            the first step
+     * @return the request
+     */
+    private String firstEditRequest( String strText, EditStep step )
+    {
+        if ( step.featureId( ) != null )
+        {
+            return buildPrompt( findActiveFeature( step.featureId( ) ).getPromptTemplate( ), strText );
+        }
+        return String.format( EDIT_FIRST_REQUEST, strText, step.instruction( ) );
+    }
 
+    /**
+     * Builds the request of a refining step, on the previous answer.
+     *
+     * @param step
+     *            the step
+     * @return the request
+     */
+    private String nextEditRequest( EditStep step )
+    {
+        String strInstruction = step.featureId( ) != null ? findActiveFeature( step.featureId( ) ).getName( ) : step.instruction( );
+        return String.format( EDIT_NEXT_REQUEST, strInstruction );
+    }
+
+    /**
+     * Finds an active feature.
+     *
+     * @param nFeatureId
+     *            the feature identifier
+     * @return the feature
+     * @throws IllegalArgumentException
+     *             if the feature is not found
+     * @throws IllegalStateException
+     *             if the feature is not active
+     */
+    private AiFeature findActiveFeature( int nFeatureId )
+    {
+        AiFeature feature = AiFeatureHome.findByPrimaryKey( nFeatureId )
+                .orElseThrow( ( ) -> new IllegalArgumentException( ERROR_FEATURE_NOT_FOUND + nFeatureId ) );
         if ( !feature.isActive( ) )
         {
             throw new IllegalStateException( ERROR_FEATURE_INACTIVE + nFeatureId );
         }
-
-        String prompt = buildPrompt( feature.getPromptTemplate( ), strText );
-        _streamingChatModel.chat( prompt, handler );
+        return feature;
     }
 
     /**
