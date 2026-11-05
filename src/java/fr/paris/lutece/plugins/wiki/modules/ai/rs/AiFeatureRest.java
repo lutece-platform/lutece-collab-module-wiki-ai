@@ -33,10 +33,12 @@
  */
 package fr.paris.lutece.plugins.wiki.modules.ai.rs;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import javax.servlet.http.HttpServletRequest;
@@ -58,6 +60,7 @@ import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import fr.paris.lutece.plugins.wiki.modules.ai.business.AiFeature;
 import fr.paris.lutece.plugins.wiki.modules.ai.business.AiRateLimitStatus;
 import fr.paris.lutece.plugins.wiki.modules.ai.service.chat.AiFeatureService;
+import fr.paris.lutece.plugins.wiki.modules.ai.service.chat.EditStep;
 import fr.paris.lutece.plugins.wiki.modules.ai.service.chat.StreamingService;
 import fr.paris.lutece.plugins.wiki.modules.ai.service.event.WikiEvent;
 import fr.paris.lutece.plugins.wiki.modules.ai.service.event.WikiEventService;
@@ -67,6 +70,7 @@ import fr.paris.lutece.plugins.wiki.modules.ai.service.rate.RateLimitResult;
 import fr.paris.lutece.portal.service.security.LuteceUser;
 import fr.paris.lutece.portal.service.security.SecurityService;
 import fr.paris.lutece.portal.service.util.AppLogService;
+import fr.paris.lutece.portal.service.util.AppPropertiesService;
 
 /**
  * REST endpoint for AI feature operations including streaming responses.
@@ -75,7 +79,7 @@ import fr.paris.lutece.portal.service.util.AppLogService;
 public class AiFeatureRest extends AbstractRestEndpoint
 {
     private static final String LOG_ERROR_AI_FEATURES = "Error in AI features REST API: ";
-    private static final String LOG_FEATURE_NOT_FOUND = "Feature not found: ";
+    private static final String LOG_FEATURE_NOT_FOUND = "Feature not found for stream: ";
     private static final String LOG_AUTH_FAILED = "Authentication failed for AI feature: ";
     private static final String LOG_SSE_ERROR = "Error setting up SSE stream for streamId: ";
     private static final String LOG_ERROR_SENDING_TOKEN = "Error sending token event";
@@ -86,6 +90,15 @@ public class AiFeatureRest extends AbstractRestEndpoint
     private static final String KEY_STATUS = "status";
     private static final String KEY_FEATURE_ID = "feature_id";
     private static final String KEY_TEXT = "text";
+    private static final String KEY_STEPS = "steps";
+    private static final String KEY_INSTRUCTION = "instruction";
+    private static final String KEY_RESULT = "result";
+    private static final String PROPERTY_EDIT_MAX_TEXT_LENGTH = "wiki.ai.edit.maxTextLength";
+    private static final String PROPERTY_EDIT_MAX_INSTRUCTION_LENGTH = "wiki.ai.edit.maxInstructionLength";
+    private static final String PROPERTY_EDIT_MAX_STEPS = "wiki.ai.edit.maxSteps";
+    private static final int DEFAULT_EDIT_MAX_TEXT_LENGTH = 20000;
+    private static final int DEFAULT_EDIT_MAX_INSTRUCTION_LENGTH = 1000;
+    private static final int DEFAULT_EDIT_MAX_STEPS = 10;
     private static final String VALUE_STATUS_DONE = "done";
 
     @Context
@@ -204,10 +217,105 @@ public class AiFeatureRest extends AbstractRestEndpoint
             return createErrorResponse( Response.Status.SERVICE_UNAVAILABLE, WikiAIRestConstants.ERROR_HIGH_TRAFFIC );
         }
 
-        String streamId = UUID.randomUUID( ).toString( );
-        executeStreamingFeature( nFeatureId, strText, streamId );
+        return startStream( handler -> _featureService.executeFeature( nFeatureId, strText, handler ) );
+    }
 
-        return Response.status( Response.Status.OK ).entity( Map.of( WikiAIRestConstants.KEY_STREAM_ID, streamId ) ).build( );
+    /**
+     * Initializes a streaming AI edit of a selection: a feature or an instruction applied to the selection, then refined step by step.
+     *
+     * @param request
+     *            the request containing the selected text and the steps, the last one being the request to run
+     * @return response containing the stream_id or error details
+     */
+    @POST
+    @Path( "stream/edit" )
+    @Consumes( MediaType.APPLICATION_JSON )
+    @Produces( MediaType.APPLICATION_JSON )
+    public Response initStreamingEdit( Map<String, Object> request )
+    {
+        LuteceUser user = authenticate( );
+        if ( user == null )
+        {
+            return createUnauthorizedResponse( );
+        }
+
+        Object text = request.get( KEY_TEXT );
+        String strText = text instanceof String ? (String) text : null;
+        if ( strText == null || strText.isBlank( ) )
+        {
+            return createErrorResponse( Response.Status.BAD_REQUEST, WikiAIRestConstants.ERROR_TEXT_REQUIRED );
+        }
+        int nMaxTextLength = AppPropertiesService.getPropertyInt( PROPERTY_EDIT_MAX_TEXT_LENGTH, DEFAULT_EDIT_MAX_TEXT_LENGTH );
+        if ( strText.length( ) > nMaxTextLength )
+        {
+            return createErrorResponse( Response.Status.BAD_REQUEST, WikiAIRestConstants.ERROR_TEXT_TOO_LONG );
+        }
+
+        List<EditStep> steps = readSteps( request.get( KEY_STEPS ), nMaxTextLength );
+        if ( steps == null )
+        {
+            return createErrorResponse( Response.Status.BAD_REQUEST, WikiAIRestConstants.ERROR_INVALID_EDIT_STEPS );
+        }
+
+        RateLimitResult rateLimitResult = _rateLimitService.checkRateLimit( user.getName( ) );
+        if ( !rateLimitResult.isAllowed( ) )
+        {
+            return createErrorResponse( Response.Status.TOO_MANY_REQUESTS, rateLimitResult.getErrorMessage( ) );
+        }
+        if ( !_streamingService.canCreateNewStream( ) )
+        {
+            return createErrorResponse( Response.Status.SERVICE_UNAVAILABLE, WikiAIRestConstants.ERROR_HIGH_TRAFFIC );
+        }
+
+        return startStream( handler -> _featureService.editSelection( strText, steps, handler ) );
+    }
+
+    /**
+     * Reads the steps of an AI edit: each one has a feature or an instruction, every step but the last one has its answer.
+     *
+     * @param value
+     *            the steps of the request
+     * @param nMaxTextLength
+     *            the maximum length of an answer
+     * @return the steps, or null when they are invalid
+     */
+    private static List<EditStep> readSteps( Object value, int nMaxTextLength )
+    {
+        if ( !( value instanceof List ) )
+        {
+            return null;
+        }
+        List<?> list = (List<?>) value;
+        if ( list.isEmpty( ) || list.size( ) > AppPropertiesService.getPropertyInt( PROPERTY_EDIT_MAX_STEPS, DEFAULT_EDIT_MAX_STEPS ) )
+        {
+            return null;
+        }
+        int nMaxInstructionLength = AppPropertiesService.getPropertyInt( PROPERTY_EDIT_MAX_INSTRUCTION_LENGTH, DEFAULT_EDIT_MAX_INSTRUCTION_LENGTH );
+        List<EditStep> steps = new ArrayList<>( );
+        for ( int i = 0; i < list.size( ); i++ )
+        {
+            Object item = list.get( i );
+            if ( !( item instanceof Map ) )
+            {
+                return null;
+            }
+            Map<?, ?> map = (Map<?, ?>) item;
+            Object featureId = map.get( KEY_FEATURE_ID );
+            Object instruction = map.get( KEY_INSTRUCTION );
+            Object result = map.get( KEY_RESULT );
+            Integer nFeatureId = featureId instanceof Number ? ( (Number) featureId ).intValue( ) : null;
+            String strInstruction = instruction instanceof String && !( (String) instruction ).isBlank( ) ? ( (String) instruction ).strip( ) : null;
+            String strResult = result instanceof String ? (String) result : null;
+            boolean bLast = i == list.size( ) - 1;
+            if ( ( nFeatureId == null ) == ( strInstruction == null ) || ( strResult == null ) != bLast
+                    || ( strInstruction != null && strInstruction.length( ) > nMaxInstructionLength )
+                    || ( strResult != null && strResult.length( ) > nMaxTextLength ) )
+            {
+                return null;
+            }
+            steps.add( new EditStep( nFeatureId, strInstruction, strResult ) );
+        }
+        return steps;
     }
 
     /**
@@ -245,78 +353,88 @@ public class AiFeatureRest extends AbstractRestEndpoint
     }
 
     /**
-     * Executes the streaming feature asynchronously.
+     * Starts a model call asynchronously on a new stream.
      *
-     * @param nFeatureId
-     *            the feature identifier
-     * @param strText
-     *            the input text
+     * @param call
+     *            the model call, given the handler of its answer
+     * @return response containing the stream_id
+     */
+    private Response startStream( Consumer<StreamingChatResponseHandler> call )
+    {
+        String streamId = UUID.randomUUID( ).toString( );
+        CompletableFuture.runAsync( ( ) -> stream( streamId, call ) );
+        return Response.status( Response.Status.OK ).entity( Map.of( WikiAIRestConstants.KEY_STREAM_ID, streamId ) ).build( );
+    }
+
+    /**
+     * Runs a model call and sends its tokens, its end or its error as events of a stream.
+     *
      * @param streamId
      *            the stream identifier
+     * @param call
+     *            the model call, given the handler of its answer
      */
-    private void executeStreamingFeature( int nFeatureId, String strText, String streamId )
+    private void stream( String streamId, Consumer<StreamingChatResponseHandler> call )
     {
-        CompletableFuture.runAsync( ( ) -> {
-            try
+        try
+        {
+            call.accept( new StreamingChatResponseHandler( )
             {
-                _featureService.executeFeature( nFeatureId, strText, new StreamingChatResponseHandler( )
+                /**
+                 * {@inheritDoc}
+                 */
+                @Override
+                public void onPartialResponse( String token )
                 {
-                    /**
-                     * {@inheritDoc}
-                     */
-                    @Override
-                    public void onPartialResponse( String token )
+                    try
                     {
-                        try
-                        {
-                            WikiEvent event = new WikiEvent( streamId, WikiEventTypes.TOKEN_STREAMED, Map.of( WikiAIRestConstants.KEY_TOKEN, token ) );
-                            _eventService.dispatchEvent( event );
-                        }
-                        catch( Exception e )
-                        {
-                            AppLogService.error( LOG_ERROR_SENDING_TOKEN, e );
-                        }
+                        WikiEvent event = new WikiEvent( streamId, WikiEventTypes.TOKEN_STREAMED, Map.of( WikiAIRestConstants.KEY_TOKEN, token ) );
+                        _eventService.dispatchEvent( event );
                     }
+                    catch( Exception e )
+                    {
+                        AppLogService.error( LOG_ERROR_SENDING_TOKEN, e );
+                    }
+                }
 
-                    /**
-                     * {@inheritDoc}
-                     */
-                    @Override
-                    public void onCompleteResponse( ChatResponse response )
+                /**
+                 * {@inheritDoc}
+                 */
+                @Override
+                public void onCompleteResponse( ChatResponse response )
+                {
+                    try
                     {
-                        try
-                        {
-                            WikiEvent event = new WikiEvent( streamId, WikiEventTypes.STREAM_COMPLETED, Map.of( KEY_STATUS, VALUE_STATUS_DONE ) );
-                            _eventService.dispatchEvent( event );
-                        }
-                        catch( Exception e )
-                        {
-                            AppLogService.error( LOG_ERROR_SENDING_COMPLETED, e );
-                        }
+                        WikiEvent event = new WikiEvent( streamId, WikiEventTypes.STREAM_COMPLETED, Map.of( KEY_STATUS, VALUE_STATUS_DONE ) );
+                        _eventService.dispatchEvent( event );
                     }
+                    catch( Exception e )
+                    {
+                        AppLogService.error( LOG_ERROR_SENDING_COMPLETED, e );
+                    }
+                }
 
-                    /**
-                     * {@inheritDoc}
-                     */
-                    @Override
-                    public void onError( Throwable error )
-                    {
-                        AppLogService.error( LOG_ERROR_DURING_STREAMING + error.getMessage( ), error );
-                        sendErrorEvent( streamId, error.getMessage( ) );
-                    }
-                } );
-            }
-            catch( IllegalArgumentException e )
-            {
-                AppLogService.error( LOG_FEATURE_NOT_FOUND + nFeatureId, e );
-                sendErrorEvent( streamId, WikiAIRestConstants.ERROR_FEATURE_NOT_FOUND );
-            }
-            catch( Exception e )
-            {
-                AppLogService.error( LOG_ERROR_EXECUTING_STREAMING + e.getMessage( ), e );
-                sendErrorEvent( streamId, e.getMessage( ) );
-            }
-        } );
+                /**
+                 * {@inheritDoc}
+                 */
+                @Override
+                public void onError( Throwable error )
+                {
+                    AppLogService.error( LOG_ERROR_DURING_STREAMING + error.getMessage( ), error );
+                    sendErrorEvent( streamId, error.getMessage( ) );
+                }
+            } );
+        }
+        catch( IllegalArgumentException e )
+        {
+            AppLogService.error( LOG_FEATURE_NOT_FOUND + streamId, e );
+            sendErrorEvent( streamId, WikiAIRestConstants.ERROR_FEATURE_NOT_FOUND );
+        }
+        catch( Exception e )
+        {
+            AppLogService.error( LOG_ERROR_EXECUTING_STREAMING + e.getMessage( ), e );
+            sendErrorEvent( streamId, e.getMessage( ) );
+        }
     }
 
     /**

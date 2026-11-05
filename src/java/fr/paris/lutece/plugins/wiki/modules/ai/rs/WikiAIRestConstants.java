@@ -46,6 +46,8 @@ public final class WikiAIRestConstants
     public static final String ERROR_TEXT_REQUIRED = "Le texte est obligatoire";
     public static final String ERROR_FEATURE_ID_REQUIRED = "L'identifiant de la feature est obligatoire";
     public static final String ERROR_FEATURE_NOT_FOUND = "Feature non trouvée";
+    public static final String ERROR_TEXT_TOO_LONG = "La sélection est trop longue pour l'IA";
+    public static final String ERROR_INVALID_EDIT_STEPS = "La demande à l'IA est invalide";
     public static final String ERROR_QUERY_REQUIRED = "La requête est obligatoire";
     public static final String ERROR_CONVERSATION_ID_REQUIRED = "Identifiant de conversation requis";
     public static final String ERROR_INVALID_CONVERSATION_ID = "Format d'identifiant de conversation invalide";
