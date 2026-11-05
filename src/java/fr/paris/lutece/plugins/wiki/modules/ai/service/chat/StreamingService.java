@@ -42,6 +42,8 @@ import fr.paris.lutece.portal.service.util.AppLogService;
 import fr.paris.lutece.portal.service.util.AppPropertiesService;
 
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.Resource;
+import jakarta.enterprise.concurrent.ManagedExecutorService;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.core.MediaType;
@@ -78,11 +80,17 @@ public class StreamingService implements ShutdownService
     private static final String ERROR_CLOSING_EVENT_SINK = "Error closing SSE event sink";
     private static final String EXCEPTION_FAILED_REGISTER = "Failed to register SSE stream";
     private static final long EXPIRY_TIME_MS_FACTOR = 1000;
+    private static final String KEY_ERROR = "error";
+    private static final String ERROR_STREAM_TASK = "Error running the task of stream: {}";
+    private static final String MESSAGE_STREAM_TASK_FAILED = "Erreur interne du serveur";
 
     private static final int MAX_CONCURRENT_STREAMS = AppPropertiesService.getPropertyInt( PROPERTY_MAX_CONCURRENT_STREAMS, DEFAULT_MAX_CONCURRENT_STREAMS );
     private static final int STREAM_EXPIRY_SECONDS = AppPropertiesService.getPropertyInt( PROPERTY_STREAM_EXPIRY_SECONDS, DEFAULT_STREAM_EXPIRY_SECONDS );
 
     private final Map<String, StreamSubscription> _activeStreams = new ConcurrentHashMap<>( );
+    private final Map<String, PendingStream> _pendingStreams = new ConcurrentHashMap<>( );
+    @Resource
+    private ManagedExecutorService _executor;
     private final ScheduledExecutorService _cleanupService = Executors.newSingleThreadScheduledExecutor( r -> {
         Thread t = new Thread( r, THREAD_NAME );
         t.setDaemon( true );
@@ -125,6 +133,7 @@ public class StreamingService implements ShutdownService
 
             StreamSubscription subscription = new StreamSubscription( strStreamId, strUserId, eventSink, eventSubscription );
             _activeStreams.put( strStreamId, subscription );
+            startPendingStream( strStreamId, strUserId );
 
             return ( ) -> unregisterSseStream( strStreamId );
         }
@@ -345,6 +354,60 @@ public class StreamingService implements ShutdownService
     }
 
     /**
+     * Keeps the task producing the events of a stream until the client of the same user opens the event stream, so that
+     * no event is sent before the client listens.
+     *
+     * @param strStreamId
+     *            the stream identifier
+     * @param strUserId
+     *            the user who asked for the stream
+     * @param task
+     *            the task producing the stream events
+     */
+    public void prepareStream( String strStreamId, String strUserId, Runnable task )
+    {
+        _pendingStreams.put( strStreamId, new PendingStream( strUserId, task, System.currentTimeMillis( ) ) );
+    }
+
+    /**
+     * Runs on the managed executor the task kept for a stream, once its user opened the event stream.
+     *
+     * @param strStreamId
+     *            the stream identifier
+     * @param strUserId
+     *            the user who opened the event stream
+     */
+    private void startPendingStream( String strStreamId, String strUserId )
+    {
+        PendingStream pending = _pendingStreams.get( strStreamId );
+        if ( pending != null && pending.userId( ).equals( strUserId ) && _pendingStreams.remove( strStreamId, pending ) )
+        {
+            _executor.execute( ( ) -> runStreamTask( strStreamId, pending.task( ) ) );
+        }
+    }
+
+    /**
+     * Runs a stream task and turns any failure, errors included, into an error event of the stream.
+     *
+     * @param strStreamId
+     *            the stream identifier
+     * @param task
+     *            the task producing the stream events
+     */
+    private void runStreamTask( String strStreamId, Runnable task )
+    {
+        try
+        {
+            task.run( );
+        }
+        catch( RuntimeException | Error e )
+        {
+            AppLogService.error( ERROR_STREAM_TASK, strStreamId, e );
+            _eventService.dispatchEvent( new WikiEvent( strStreamId, WikiEventTypes.STREAM_ERROR, Map.of( KEY_ERROR, MESSAGE_STREAM_TASK_FAILED ) ) );
+        }
+    }
+
+    /**
      * Cleans up expired streams
      */
     private void cleanupExpiredStreams( )
@@ -352,6 +415,7 @@ public class StreamingService implements ShutdownService
         long now = System.currentTimeMillis( );
         long expiryTimeMs = STREAM_EXPIRY_SECONDS * EXPIRY_TIME_MS_FACTOR;
 
+        _pendingStreams.values( ).removeIf( pending -> ( now - pending.createdAt( ) ) > expiryTimeMs );
         _activeStreams.entrySet( ).removeIf( entry -> {
             StreamSubscription subscription = entry.getValue( );
             boolean expired = ( now - subscription.getLastAccessed( ) ) > expiryTimeMs;
@@ -362,6 +426,20 @@ public class StreamingService implements ShutdownService
             }
             return expired;
         } );
+    }
+
+    /**
+     * A stream task waiting for its event stream.
+     *
+     * @param userId
+     *            the user who asked for the stream
+     * @param task
+     *            the task producing the stream events
+     * @param createdAt
+     *            the creation time, in milliseconds
+     */
+    private record PendingStream( String userId, Runnable task, long createdAt )
+    {
     }
 
     /**

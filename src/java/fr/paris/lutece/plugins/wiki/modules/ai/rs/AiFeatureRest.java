@@ -36,7 +36,6 @@ package fr.paris.lutece.plugins.wiki.modules.ai.rs;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import jakarta.enterprise.context.RequestScoped;
@@ -193,7 +192,7 @@ public class AiFeatureRest extends AbstractRestEndpoint
             return createErrorResponse( Response.Status.TOO_MANY_REQUESTS, rateLimitResult.getErrorMessage( ) );
         }
 
-        Integer nFeatureId = (Integer) request.get( KEY_FEATURE_ID );
+        Integer nFeatureId = request.get( KEY_FEATURE_ID ) instanceof Number number ? number.intValue( ) : null;
         String strText = (String) request.get( KEY_TEXT );
 
         if ( nFeatureId == null )
@@ -212,7 +211,7 @@ public class AiFeatureRest extends AbstractRestEndpoint
         }
 
         String streamId = UUID.randomUUID( ).toString( );
-        executeStreamingFeature( nFeatureId, strText, streamId );
+        _streamingService.prepareStream( streamId, user.getName( ), ( ) -> executeStreamingFeature( nFeatureId, strText, streamId ) );
 
         return Response.status( Response.Status.OK ).entity( Map.of( WikiAIRestConstants.KEY_STREAM_ID, streamId ) ).build( );
     }
@@ -263,67 +262,65 @@ public class AiFeatureRest extends AbstractRestEndpoint
      */
     private void executeStreamingFeature( int nFeatureId, String strText, String streamId )
     {
-        CompletableFuture.runAsync( ( ) -> {
-            try
+        try
+        {
+            _featureService.executeFeature( nFeatureId, strText, new StreamingChatResponseHandler( )
             {
-                _featureService.executeFeature( nFeatureId, strText, new StreamingChatResponseHandler( )
+                /**
+                 * {@inheritDoc}
+                 */
+                @Override
+                public void onPartialResponse( String token )
                 {
-                    /**
-                     * {@inheritDoc}
-                     */
-                    @Override
-                    public void onPartialResponse( String token )
+                    try
                     {
-                        try
-                        {
-                            WikiEvent event = new WikiEvent( streamId, WikiEventTypes.TOKEN_STREAMED, Map.of( WikiAIRestConstants.KEY_TOKEN, token ) );
-                            _eventService.dispatchEvent( event );
-                        }
-                        catch( Exception e )
-                        {
-                            AppLogService.error( LOG_ERROR_SENDING_TOKEN, e );
-                        }
+                        WikiEvent event = new WikiEvent( streamId, WikiEventTypes.TOKEN_STREAMED, Map.of( WikiAIRestConstants.KEY_TOKEN, token ) );
+                        _eventService.dispatchEvent( event );
                     }
+                    catch( Exception e )
+                    {
+                        AppLogService.error( LOG_ERROR_SENDING_TOKEN, e );
+                    }
+                }
 
-                    /**
-                     * {@inheritDoc}
-                     */
-                    @Override
-                    public void onCompleteResponse( ChatResponse response )
+                /**
+                 * {@inheritDoc}
+                 */
+                @Override
+                public void onCompleteResponse( ChatResponse response )
+                {
+                    try
                     {
-                        try
-                        {
-                            WikiEvent event = new WikiEvent( streamId, WikiEventTypes.STREAM_COMPLETED, Map.of( KEY_STATUS, VALUE_STATUS_DONE ) );
-                            _eventService.dispatchEvent( event );
-                        }
-                        catch( Exception e )
-                        {
-                            AppLogService.error( LOG_ERROR_SENDING_COMPLETED, e );
-                        }
+                        WikiEvent event = new WikiEvent( streamId, WikiEventTypes.STREAM_COMPLETED, Map.of( KEY_STATUS, VALUE_STATUS_DONE ) );
+                        _eventService.dispatchEvent( event );
                     }
+                    catch( Exception e )
+                    {
+                        AppLogService.error( LOG_ERROR_SENDING_COMPLETED, e );
+                    }
+                }
 
-                    /**
-                     * {@inheritDoc}
-                     */
-                    @Override
-                    public void onError( Throwable error )
-                    {
-                        AppLogService.error( LOG_ERROR_DURING_STREAMING, error.getMessage( ), error );
-                        sendErrorEvent( streamId, error.getMessage( ) );
-                    }
-                } );
-            }
-            catch( IllegalArgumentException e )
-            {
-                AppLogService.error( LOG_FEATURE_NOT_FOUND, nFeatureId, e );
-                sendErrorEvent( streamId, WikiAIRestConstants.ERROR_FEATURE_NOT_FOUND );
-            }
-            catch( Exception e )
-            {
-                AppLogService.error( LOG_ERROR_EXECUTING_STREAMING, e.getMessage( ), e );
-                sendErrorEvent( streamId, e.getMessage( ) );
-            }
-        } );
+                /**
+                 * {@inheritDoc}
+                 */
+                @Override
+                public void onError( Throwable error )
+                {
+                    AppLogService.error( LOG_ERROR_DURING_STREAMING, error.getMessage( ), error );
+                    sendErrorEvent( streamId, error.getMessage( ) );
+                }
+            } );
+        }
+        catch( IllegalArgumentException e )
+        {
+            AppLogService.error( LOG_FEATURE_NOT_FOUND, nFeatureId, e );
+            sendErrorEvent( streamId, WikiAIRestConstants.ERROR_FEATURE_NOT_FOUND );
+        }
+        catch( Exception e )
+        {
+            AppLogService.error( LOG_ERROR_EXECUTING_STREAMING, e.getMessage( ), e );
+            sendErrorEvent( streamId, e.getMessage( ) );
+        }
     }
 
     /**

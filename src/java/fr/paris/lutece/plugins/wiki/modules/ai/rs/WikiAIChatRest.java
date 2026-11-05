@@ -34,9 +34,9 @@
 package fr.paris.lutece.plugins.wiki.modules.ai.rs;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.inject.Inject;
@@ -145,8 +145,6 @@ public class WikiAIChatRest extends AbstractRestEndpoint
     private StreamingService _sseStreamManager;
     @Inject
     private WikiEventService _eventService;
-    @jakarta.annotation.Resource
-    private jakarta.enterprise.concurrent.ManagedExecutorService _managedExecutor;
     /**
      * Creates a new conversation for the authenticated user.
      *
@@ -226,7 +224,8 @@ public class WikiAIChatRest extends AbstractRestEndpoint
         }
 
         String streamId = UUID.randomUUID( ).toString( );
-        executeStreamingChat( query, conversationId, user, streamId, _request.getLocale( ), fromUrl );
+        Locale locale = _request.getLocale( );
+        _sseStreamManager.prepareStream( streamId, user.getName( ), ( ) -> executeStreamingChat( query, conversationId, user, streamId, locale, fromUrl ) );
 
         return Response.status( Response.Status.OK ).entity( Map.of( WikiAIRestConstants.KEY_STREAM_ID, streamId ) ).build( );
     }
@@ -281,39 +280,37 @@ public class WikiAIChatRest extends AbstractRestEndpoint
      * @param fromUrl
      *            the URL the user is currently viewing
      */
-    private void executeStreamingChat( String query, String conversationId, LuteceUser user, String streamId, java.util.Locale locale, String fromUrl )
+    private void executeStreamingChat( String query, String conversationId, LuteceUser user, String streamId, Locale locale, String fromUrl )
     {
-        CompletableFuture.runAsync( ( ) -> {
-            try
+        try
+        {
+            StreamingContext streamingContext = _ragService.chatWithStreaming( query, conversationId, user, streamId, locale, fromUrl );
+            if ( streamingContext == null )
             {
-                StreamingContext streamingContext = _ragService.chatWithStreaming( query, conversationId, user, streamId, locale, fromUrl );
-                if ( streamingContext == null )
-                {
-                    sendErrorEvent( streamId, ERROR_INIT_STREAMING );
-                    return;
-                }
-
-                TokenStream tokenStream = streamingContext.tokenStream( );
-
-                tokenStream.beforeToolExecution( beforeTool -> {
-                    handleBeforeToolExecution( streamId, beforeTool.request( ).name( ), beforeTool.request( ).arguments( ) );
-                } ).onToolExecuted( toolExecution -> {
-                    handleToolExecuted( streamId, streamingContext, toolExecution.request( ).name( ) );
-                } ).onPartialResponse( token -> {
-                    handlePartialResponse( streamId, token );
-                } ).onCompleteResponse( response -> {
-                    handleCompleteResponse( streamId );
-                } ).onError( error -> {
-                    AppLogService.error( LOG_ERROR_DURING_STREAMING, error.getMessage( ), error );
-                    sendErrorEvent( streamId, error.getMessage( ) );
-                } ).start( );
+                sendErrorEvent( streamId, ERROR_INIT_STREAMING );
+                return;
             }
-            catch( Exception e )
-            {
-                AppLogService.error( LOG_ERROR_EXECUTING_STREAMING, e.getMessage( ), e );
-                sendErrorEvent( streamId, e.getMessage( ) );
-            }
-        }, _managedExecutor );
+
+            TokenStream tokenStream = streamingContext.tokenStream( );
+
+            tokenStream.beforeToolExecution( beforeTool -> {
+                handleBeforeToolExecution( streamId, beforeTool.request( ).name( ), beforeTool.request( ).arguments( ) );
+            } ).onToolExecuted( toolExecution -> {
+                handleToolExecuted( streamId, streamingContext, toolExecution.request( ).name( ) );
+            } ).onPartialResponse( token -> {
+                handlePartialResponse( streamId, token );
+            } ).onCompleteResponse( response -> {
+                handleCompleteResponse( streamId );
+            } ).onError( error -> {
+                AppLogService.error( LOG_ERROR_DURING_STREAMING, error.getMessage( ), error );
+                sendErrorEvent( streamId, error.getMessage( ) );
+            } ).start( );
+        }
+        catch( Exception e )
+        {
+            AppLogService.error( LOG_ERROR_EXECUTING_STREAMING, e.getMessage( ), e );
+            sendErrorEvent( streamId, e.getMessage( ) );
+        }
     }
 
     /**
